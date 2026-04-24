@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import {
   ArrowLeft, MapPin, Clock, CheckCircle, Car,
-  DollarSign, PenLine, Building2, Calendar
+  DollarSign, PenLine, Building2, Calendar, Pause
 } from 'lucide-react';
 import type { TechWO, TechAction } from './types';
 import { PRIORITY_COLORS, WOT_STATUS_COLORS, WOT_STATUS_LABELS, getTechActions } from './constants';
 import { useElapsedTime } from './useElapsedTime';
 import CompleteJobModal from './CompleteJobModal';
+import PauseReasonSheet from './PauseReasonSheet';
 import SystemAccessPanel from './SystemAccessPanel';
 import SiteInventoryPanel from './SiteInventoryPanel';
 import PartsUsedPanel from './PartsUsedPanel';
@@ -19,6 +20,8 @@ interface Props {
     signature?: string | null;
     paymentCollected?: number | null;
     paymentMethod?: string | null;
+    pauseReason?: string | null;
+    pauseNotes?: string | null;
   }) => Promise<void>;
   onSaveNotes: (jobId: string, wotId: string, notes: string) => Promise<void>;
 }
@@ -26,12 +29,19 @@ interface Props {
 export default function JobDetail({ job, onBack, onAction, onSaveNotes }: Props) {
   const [acting, setActing] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [showPauseSheet, setShowPauseSheet] = useState(false);
+  const [confirmDanger, setConfirmDanger] = useState<null | 'cannot_complete' | 'go_back'>(null);
   const [techNotes, setTechNotes] = useState(job.technician_notes || '');
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesSaved, setNotesSaved] = useState(false);
 
-  const activeStart = job.wot_status === 'enroute' ? job.wot_enroute_at :
-    job.wot_status === 'working' ? job.wot_onsite_at : null;
+  const isWorking = job.wot_status === 'working' || job.wot_status === 'onsite';
+  const isPaused = job.wot_status === 'on_break';
+  const isEnroute = job.wot_status === 'enroute';
+
+  const activeStart = isEnroute ? job.wot_enroute_at :
+    isWorking ? job.wot_onsite_at :
+    isPaused ? job.wot_paused_at : null;
   const elapsed = useElapsedTime(activeStart);
 
   const actions = getTechActions(job.wot_status);
@@ -42,8 +52,32 @@ export default function JobDetail({ job, onBack, onAction, onSaveNotes }: Props)
       setShowCompleteModal(true);
       return;
     }
+    if (action === 'take_break') {
+      setShowPauseSheet(true);
+      return;
+    }
+    if (action === 'cannot_complete' || action === 'go_back') {
+      setConfirmDanger(action);
+      return;
+    }
     setActing(true);
     await onAction(job, action);
+    setActing(false);
+  }
+
+  async function handlePauseConfirm(reason: string, notes: string) {
+    setShowPauseSheet(false);
+    setActing(true);
+    await onAction(job, 'take_break', { pauseReason: reason, pauseNotes: notes || null });
+    setActing(false);
+  }
+
+  async function handleDangerConfirm() {
+    if (!confirmDanger) return;
+    const a = confirmDanger;
+    setConfirmDanger(null);
+    setActing(true);
+    await onAction(job, a);
     setActing(false);
   }
 
@@ -90,21 +124,46 @@ export default function JobDetail({ job, onBack, onAction, onSaveNotes }: Props)
         </div>
 
         <div className="max-w-2xl mx-auto px-4 py-4 space-y-4">
-          {/* Time tracker */}
-          {elapsed && (
-            <div className={`rounded-2xl p-4 flex items-center justify-between ${
-              job.wot_status === 'working' ? 'bg-emerald-50 border border-emerald-200' : 'bg-blue-50 border border-blue-200'
-            }`}>
-              <div className="flex items-center gap-2">
-                <Clock className={`h-5 w-5 ${job.wot_status === 'working' ? 'text-emerald-600' : 'text-blue-600'}`} />
-                <span className={`text-sm font-semibold ${job.wot_status === 'working' ? 'text-emerald-800' : 'text-blue-800'}`}>
-                  {job.wot_status === 'working' ? 'Time on site' : 'Time enroute'}
+          {/* Time tracker banner */}
+          {elapsed && !isCompleted && (
+            isPaused ? (
+              <div className="rounded-2xl p-4 bg-amber-50 border border-amber-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+                    </span>
+                    <span className="text-sm font-bold text-amber-900">
+                      Paused{job.wot_current_pause_reason ? ` — ${job.wot_current_pause_reason}` : ''}
+                    </span>
+                  </div>
+                  <span className="text-2xl font-mono font-bold text-amber-700">{elapsed}</span>
+                </div>
+                {job.wot_current_pause_notes && (
+                  <p className="text-xs text-amber-800/80 pl-5">“{job.wot_current_pause_notes}”</p>
+                )}
+              </div>
+            ) : (
+              <div className={`rounded-2xl p-4 flex items-center justify-between ${
+                isWorking ? 'bg-emerald-50 border border-emerald-200' : 'bg-blue-50 border border-blue-200'
+              }`}>
+                <div className="flex items-center gap-2">
+                  <Clock className={`h-5 w-5 ${isWorking ? 'text-emerald-600' : 'text-blue-600'}`} />
+                  <span className={`text-sm font-semibold ${isWorking ? 'text-emerald-800' : 'text-blue-800'}`}>
+                    {isWorking ? 'On the clock' : 'Driving'}
+                  </span>
+                  {isWorking && (job.wot_total_paused_minutes ?? 0) > 0 && (
+                    <span className="text-xs text-emerald-700/70 font-medium">
+                      · {job.wot_total_paused_minutes}m paused today
+                    </span>
+                  )}
+                </div>
+                <span className={`text-2xl font-mono font-bold ${isWorking ? 'text-emerald-700' : 'text-blue-700'}`}>
+                  {elapsed}
                 </span>
               </div>
-              <span className={`text-2xl font-mono font-bold ${job.wot_status === 'working' ? 'text-emerald-700' : 'text-blue-700'}`}>
-                {elapsed}
-              </span>
-            </div>
+            )
           )}
 
           {/* Job Info Card */}
@@ -180,25 +239,24 @@ export default function JobDetail({ job, onBack, onAction, onSaveNotes }: Props)
           {/* Timeline + Durations */}
           <div className="bg-white rounded-2xl border border-gray-200 p-4">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Timeline</p>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {[
-                { label: 'Enroute', ts: job.wot_enroute_at, Icon: Car, activeColor: 'bg-blue-50 text-blue-700' },
-                { label: 'On Site', ts: job.wot_onsite_at, Icon: MapPin, activeColor: 'bg-teal-50 text-teal-700' },
-                { label: 'Done', ts: job.wot_completed_at, Icon: CheckCircle, activeColor: 'bg-emerald-50 text-emerald-700' },
-              ].map(({ label, ts, Icon, activeColor }) => (
-                <div key={label} className={`flex-1 text-center py-3 rounded-xl ${ts ? activeColor : 'bg-gray-50'}`}>
-                  <Icon className={`h-4 w-4 mx-auto mb-1 ${ts ? '' : 'text-gray-300'}`} />
-                  <p className={`text-xs font-semibold ${ts ? '' : 'text-gray-400'}`}>{label}</p>
-                  <p className="text-xs mt-0.5">
-                    {ts ? new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '—'}
-                  </p>
+                { label: 'Enroute', value: job.wot_enroute_at ? new Date(job.wot_enroute_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '—', active: !!job.wot_enroute_at, Icon: Car, activeColor: 'bg-blue-50 text-blue-700' },
+                { label: 'Arrived', value: job.wot_onsite_at ? new Date(job.wot_onsite_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '—', active: !!job.wot_onsite_at, Icon: MapPin, activeColor: 'bg-emerald-50 text-emerald-700' },
+                { label: 'Paused', value: (job.wot_total_paused_minutes ?? 0) > 0 || isPaused ? `${job.wot_total_paused_minutes ?? 0}m` : '—', active: (job.wot_total_paused_minutes ?? 0) > 0 || isPaused, Icon: Pause, activeColor: 'bg-amber-50 text-amber-700' },
+                { label: 'Done', value: job.wot_completed_at ? new Date(job.wot_completed_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '—', active: !!job.wot_completed_at, Icon: CheckCircle, activeColor: 'bg-emerald-50 text-emerald-700' },
+              ].map(({ label, value, active, Icon, activeColor }) => (
+                <div key={label} className={`text-center py-3 rounded-xl ${active ? activeColor : 'bg-gray-50'}`}>
+                  <Icon className={`h-4 w-4 mx-auto mb-1 ${active ? '' : 'text-gray-300'}`} />
+                  <p className={`text-xs font-semibold ${active ? '' : 'text-gray-400'}`}>{label}</p>
+                  <p className="text-xs mt-0.5">{value}</p>
                 </div>
               ))}
             </div>
 
             {/* Duration breakdown */}
             {(job.wot_drive_minutes != null || job.wot_onsite_at) && (
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="mt-3 grid grid-cols-3 gap-2">
                 <div className="bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
                   <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wide">Drive Time</p>
                   <p className="text-lg font-mono font-bold text-blue-900">
@@ -206,9 +264,15 @@ export default function JobDetail({ job, onBack, onAction, onSaveNotes }: Props)
                   </p>
                 </div>
                 <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
-                  <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">On Site</p>
+                  <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">Working</p>
                   <p className="text-lg font-mono font-bold text-emerald-900">
-                    {job.wot_onsite_at ? computeOnsiteDuration(job.wot_onsite_at, job.wot_completed_at) : '—'}
+                    {job.wot_onsite_at ? computeWorkingDuration(job.wot_onsite_at, job.wot_completed_at, job.wot_total_paused_minutes) : '—'}
+                  </p>
+                </div>
+                <div className="bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                  <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide">Paused</p>
+                  <p className="text-lg font-mono font-bold text-amber-900">
+                    {(job.wot_total_paused_minutes ?? 0) > 0 || isPaused ? `${job.wot_total_paused_minutes ?? 0}m` : '—'}
                   </p>
                 </div>
               </div>
@@ -297,25 +361,52 @@ export default function JobDetail({ job, onBack, onAction, onSaveNotes }: Props)
       </div>
 
       {/* Sticky Action Bar */}
-      {!isCompleted && actions.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-30">
-          <div className="max-w-2xl mx-auto">
-            <div className={`grid gap-2 ${actions.length === 1 ? 'grid-cols-1' : actions.length === 2 ? 'grid-cols-2' : 'grid-cols-2'}`}>
-              {actions.map(a => (
-                <button
-                  key={a.action}
-                  onClick={() => handleAction(a.action)}
-                  disabled={acting}
-                  className={`flex items-center justify-center gap-2 py-3.5 px-4 rounded-2xl text-sm font-bold text-white transition-all active:scale-95 ${a.color} ${acting ? 'opacity-60' : ''}`}
-                >
-                  <a.icon className="h-4 w-4" />
-                  {acting ? '...' : a.label}
-                </button>
-              ))}
+      {!isCompleted && actions.length > 0 && (() => {
+        const primary = actions.find(a => a.variant === 'primary') || actions[0];
+        const secondary = actions.filter(a => a !== primary && a.variant === 'secondary');
+        const danger = actions.filter(a => a !== primary && a.variant === 'danger');
+        return (
+          <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-30">
+            <div className="max-w-2xl mx-auto space-y-2">
+              <button
+                onClick={() => handleAction(primary.action)}
+                disabled={acting}
+                className={`w-full flex items-center justify-center gap-2 py-4 px-4 rounded-2xl text-base font-bold text-white transition-all active:scale-[0.98] ${primary.color} ${acting ? 'opacity-60' : ''}`}
+              >
+                <primary.icon className="h-5 w-5" />
+                {acting ? '...' : primary.label}
+              </button>
+
+              {(secondary.length > 0 || danger.length > 0) && (
+                <div className={`grid gap-2 ${(secondary.length + danger.length) === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                  {secondary.map(a => (
+                    <button
+                      key={a.action}
+                      onClick={() => handleAction(a.action)}
+                      disabled={acting}
+                      className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-sm font-semibold text-white transition-all active:scale-95 ${a.color} ${acting ? 'opacity-60' : ''}`}
+                    >
+                      <a.icon className="h-4 w-4" />
+                      {a.label}
+                    </button>
+                  ))}
+                  {danger.map(a => (
+                    <button
+                      key={a.action}
+                      onClick={() => handleAction(a.action)}
+                      disabled={acting}
+                      className="flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-sm font-semibold bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      <a.icon className="h-4 w-4" />
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {isCompleted && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-30">
@@ -335,14 +426,54 @@ export default function JobDetail({ job, onBack, onAction, onSaveNotes }: Props)
           onCancel={() => setShowCompleteModal(false)}
         />
       )}
+
+      {showPauseSheet && (
+        <PauseReasonSheet
+          onConfirm={handlePauseConfirm}
+          onCancel={() => setShowPauseSheet(false)}
+        />
+      )}
+
+      {confirmDanger && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl p-6">
+            <h3 className="text-base font-bold text-gray-900 mb-2">
+              {confirmDanger === 'cannot_complete' ? 'Mark as Cannot Complete?' : 'Mark as Go-Back?'}
+            </h3>
+            <p className="text-sm text-gray-600 mb-5">
+              {confirmDanger === 'cannot_complete'
+                ? 'The ticket will close out on your end and move to On Hold for the office to follow up.'
+                : 'The ticket will close out on your end and be flagged as a Go-Back for dispatch to reschedule.'}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setConfirmDanger(null)}
+                disabled={acting}
+                className="flex-1 py-3 rounded-2xl border border-gray-200 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDangerConfirm}
+                disabled={acting}
+                className={`flex-1 py-3 rounded-2xl text-white text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-60 ${
+                  confirmDanger === 'cannot_complete' ? 'bg-red-500 hover:bg-red-600' : 'bg-orange-500 hover:bg-orange-600'
+                }`}
+              >
+                {acting ? 'Saving…' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
 
-function computeOnsiteDuration(onsiteAt: string, completedAt: string | null): string {
+function computeWorkingDuration(onsiteAt: string, completedAt: string | null, pausedMinutes: number | null): string {
   const end = completedAt ? new Date(completedAt).getTime() : Date.now();
   const start = new Date(onsiteAt).getTime();
-  const mins = Math.max(0, Math.round((end - start) / 60000));
+  const mins = Math.max(0, Math.round((end - start) / 60000) - (pausedMinutes ?? 0));
   if (mins < 60) return `${mins}m`;
   const h = Math.floor(mins / 60);
   const m = mins % 60;

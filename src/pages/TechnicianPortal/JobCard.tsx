@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MapPin, Clock, CheckCircle, ChevronRight, Star } from 'lucide-react';
+import { MapPin, Clock, CheckCircle, ChevronRight, Star, Coffee } from 'lucide-react';
 import type { TechWO, TechAction } from './types';
 import { getTechActions, PRIORITY_COLORS, WOT_STATUS_COLORS, WOT_STATUS_LABELS } from './constants';
 import { useElapsedTime } from './useElapsedTime';
@@ -13,25 +13,39 @@ interface Props {
 export default function JobCard({ job, onAction, onOpenDetail }: Props) {
   const [acting, setActing] = useState(false);
 
-  const activeStart = job.wot_status === 'enroute' ? job.wot_enroute_at :
-    job.wot_status === 'working' ? job.wot_onsite_at : null;
+  const isPaused = job.wot_status === 'on_break';
+  const isWorking = job.wot_status === 'working' || job.wot_status === 'onsite';
+  const isEnroute = job.wot_status === 'enroute';
+
+  const activeStart = isEnroute ? job.wot_enroute_at :
+    isWorking ? job.wot_onsite_at :
+    isPaused ? job.wot_paused_at : null;
   const elapsed = useElapsedTime(activeStart);
 
   const actions = getTechActions(job.wot_status);
   const isCompleted = job.wot_status === 'completed';
 
-  async function handleAction(e: React.MouseEvent, action: TechAction) {
+  const primary = actions.find(a => a.variant === 'primary') || actions[0];
+
+  async function handlePrimary(e: React.MouseEvent) {
     e.stopPropagation();
+    if (!primary) return;
+    // Pause and Complete both need extra UI — defer to detail view.
+    if (primary.action === 'take_break' || primary.action === 'complete') {
+      onOpenDetail(job);
+      return;
+    }
     setActing(true);
-    await onAction(job, action);
+    await onAction(job, primary.action);
     setActing(false);
   }
 
   return (
     <div className={`bg-white rounded-2xl border-2 overflow-hidden transition-all ${
       isCompleted ? 'border-emerald-200 opacity-75' :
-      job.wot_status === 'working' ? 'border-emerald-400 shadow-lg shadow-emerald-100' :
-      job.wot_status === 'enroute' ? 'border-blue-300 shadow-md' :
+      isPaused ? 'border-amber-300 shadow-md shadow-amber-100' :
+      isWorking ? 'border-emerald-400 shadow-lg shadow-emerald-100' :
+      isEnroute ? 'border-blue-300 shadow-md' :
       'border-gray-200'
     }`}>
       <div
@@ -53,7 +67,8 @@ export default function JobCard({ job, onAction, onOpenDetail }: Props) {
               )}
               {elapsed && (
                 <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
-                  job.wot_status === 'working' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
+                  isPaused ? 'bg-amber-100 text-amber-700' :
+                  isWorking ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
                 }`}>
                   <Clock className="h-3 w-3" />
                   {elapsed}
@@ -70,6 +85,14 @@ export default function JobCard({ job, onAction, onOpenDetail }: Props) {
             <ChevronRight className="h-4 w-4 text-gray-400" />
           </div>
         </div>
+
+        {isPaused && job.wot_current_pause_reason && (
+          <div className="flex items-center gap-1.5 text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 mb-2">
+            <Coffee className="h-3.5 w-3.5 flex-shrink-0" />
+            <span className="font-semibold">Paused:</span>
+            <span className="truncate">{job.wot_current_pause_reason}</span>
+          </div>
+        )}
 
         {job.sites && (
           <div className="flex items-center gap-1.5 text-sm text-gray-500">
@@ -93,25 +116,20 @@ export default function JobCard({ job, onAction, onOpenDetail }: Props) {
         )}
       </div>
 
-      {!isCompleted && actions.length > 0 && (
-        <div className="px-4 pb-4">
-          <div className={`grid gap-2 ${actions.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
-            {actions.slice(0, 2).map(a => (
-              <button
-                key={a.action}
-                onClick={e => handleAction(e, a.action)}
-                disabled={acting}
-                className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold text-white transition-all active:scale-95 ${a.color} ${acting ? 'opacity-60' : ''}`}
-              >
-                <a.icon className="h-4 w-4" />
-                {acting ? '...' : a.label}
-              </button>
-            ))}
-          </div>
-          {actions.length > 2 && (
+      {!isCompleted && primary && (
+        <div className="px-4 pb-4 space-y-2">
+          <button
+            onClick={handlePrimary}
+            disabled={acting}
+            className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold text-white transition-all active:scale-95 ${primary.color} ${acting ? 'opacity-60' : ''}`}
+          >
+            <primary.icon className="h-4 w-4" />
+            {acting ? '...' : primary.label}
+          </button>
+          {actions.length > 1 && (
             <button
               onClick={() => onOpenDetail(job)}
-              className="mt-2 w-full text-center text-xs text-gray-500 hover:text-gray-700 py-1"
+              className="w-full text-center text-xs text-gray-500 hover:text-gray-700 py-1"
             >
               More options — tap to open job
             </button>
