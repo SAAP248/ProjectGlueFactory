@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Search, Plus, Filter, Calendar, User, AlertCircle,
   Wrench, Clock, DollarSign, LayoutList, LayoutGrid, RefreshCw,
-  RotateCcw, Phone, MessageSquare, Building2, Radio, AlertTriangle
+  RotateCcw, Phone, MessageSquare, Building2, Radio, AlertTriangle, UserPlus
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { WorkOrder } from '../CustomerProfile/types';
 import WorkOrderModal from './WorkOrderModal';
+import AssignmentModal from './AssignmentModal';
 
 interface Props {
   onViewDetail: (id: string) => void;
@@ -89,6 +90,7 @@ export default function WorkOrdersList({ onViewDetail }: Props) {
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [showModal, setShowModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [assignWoId, setAssignWoId] = useState<string | null>(null);
 
   const [stats, setStats] = useState({ open: 0, inProgress: 0, completedToday: 0, overdue: 0, goBackRate: 0 });
 
@@ -357,6 +359,7 @@ export default function WorkOrdersList({ onViewDetail }: Props) {
                     <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Tech</th>
                     <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Scheduled</th>
                     <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Billing</th>
+                    <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -466,6 +469,15 @@ export default function WorkOrdersList({ onViewDetail }: Props) {
                             </span>
                           </div>
                         </td>
+                        <td className="px-5 py-3.5 text-right">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setAssignWoId(wo.id); }}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                          >
+                            <UserPlus className="h-3.5 w-3.5" />
+                            Assign
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -565,6 +577,14 @@ export default function WorkOrdersList({ onViewDetail }: Props) {
         <WorkOrderModal
           onClose={() => setShowModal(false)}
           onSaved={loadWorkOrders}
+        />
+      )}
+
+      {assignWoId && (
+        <AssignmentModal
+          workOrderId={assignWoId}
+          onClose={() => setAssignWoId(null)}
+          onSaved={() => { setAssignWoId(null); loadWorkOrders(); }}
         />
       )}
     </div>

@@ -11,6 +11,8 @@ import PauseReasonSheet from './PauseReasonSheet';
 import SystemAccessPanel from './SystemAccessPanel';
 import SiteInventoryPanel from './SiteInventoryPanel';
 import PartsUsedPanel from './PartsUsedPanel';
+import WorkOrderPhotos from '../WorkOrders/WorkOrderPhotos';
+import { Camera } from 'lucide-react';
 
 interface Props {
   job: TechWO;
@@ -291,6 +293,15 @@ export default function JobDetail({ job, onBack, onAction, onSaveNotes }: Props)
 
           {/* Parts Used / Profitability */}
           <PartsUsedPanel job={job} />
+
+          {/* Photos */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Camera className="h-4 w-4 text-gray-500" />
+              <p className="text-sm font-semibold text-gray-700">Photos</p>
+            </div>
+            <WorkOrderPhotos workOrderId={job.id} readOnly={isCompleted} compact />
+          </div>
 
           {/* Completed Summary */}
           {isCompleted && (job.resolution_notes || job.customer_signature || job.payment_collected != null) && (
