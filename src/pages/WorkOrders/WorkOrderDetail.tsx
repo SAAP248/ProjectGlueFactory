@@ -1,15 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, CreditCard as Edit, Clock, MapPin, User, Wrench, DollarSign, Camera, FileText, ChevronDown, Plus, Trash2, AlertTriangle, CheckCircle, Navigation, Timer, CreditCard, Receipt, RotateCcw, Activity, Phone, MessageSquare, Building2, Radio, X as XIcon, Pencil, Shield, ExternalLink, Copy } from 'lucide-react';
+import { ArrowLeft, CreditCard as Edit, Clock, MapPin, User, Wrench, DollarSign, Camera, FileText, ChevronDown, Plus, Trash2, AlertTriangle, CheckCircle, Navigation, Timer, CreditCard, Receipt, RotateCcw, Activity, Phone, MessageSquare, Building2, Radio, X as XIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { WorkOrder, WorkOrderLineItem, WorkOrderAttachment } from '../CustomerProfile/types';
 import AssignmentsCard, { TechAssignment } from './AssignmentsCard';
-import WorkOrderPhotos from './WorkOrderPhotos';
 
 interface Props {
   workOrderId: string;
   onBack: () => void;
   onEdit: (id: string) => void;
-  onNavigateToCustomer?: (companyId: string) => void;
 }
 
 interface GoBackReason {
@@ -106,7 +104,7 @@ function formatDateTime(ts: string | null): string {
   });
 }
 
-export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onNavigateToCustomer }: Props) {
+export default function WorkOrderDetail({ workOrderId, onBack, onEdit }: Props) {
   const [activeTab, setActiveTab] = useState('summary');
   const [wo, setWo] = useState<WorkOrder | null>(null);
   const [lineItems, setLineItems] = useState<WorkOrderLineItem[]>([]);
@@ -132,12 +130,6 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onNavigat
   const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
 
-  const [editingField, setEditingField] = useState<null | 'reason_for_visit' | 'scope_of_work' | 'work_performed'>(null);
-  const [editValue, setEditValue] = useState('');
-  const [savingField, setSavingField] = useState(false);
-  const [showSystemModal, setShowSystemModal] = useState(false);
-  const [attachmentCount, setAttachmentCount] = useState(0);
-
   const loadData = useCallback(async () => {
     const [woRes, liRes, attRes] = await Promise.all([
       supabase
@@ -146,12 +138,6 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onNavigat
           *,
           companies(name, is_trouble_customer, trouble_notes),
           sites(name, address),
-          customer_systems(
-            id, name, panel_make, panel_model, monitoring_account_number,
-            cs_name, cs_number, comm_partner_name, comm_account_id,
-            is_on_test, is_out_of_service,
-            system_types(id, name, icon_name, color)
-          ),
           employees(first_name, last_name),
           work_order_technicians(
             id, employee_id, is_lead, enroute_at, onsite_at, completed_at, notes,
@@ -177,36 +163,9 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onNavigat
 
     if (woRes.data) setWo(woRes.data as WorkOrder);
     if (liRes.data) setLineItems(liRes.data);
-    if (attRes.data) {
-      setAttachments(attRes.data);
-      setAttachmentCount(attRes.data.length);
-    }
+    if (attRes.data) setAttachments(attRes.data);
     setLoading(false);
   }, [workOrderId]);
-
-  const loadAttachmentCount = useCallback(async () => {
-    const { count } = await supabase
-      .from('work_order_attachments')
-      .select('id', { count: 'exact', head: true })
-      .eq('work_order_id', workOrderId);
-    setAttachmentCount(count ?? 0);
-  }, [workOrderId]);
-
-  function startEdit(field: 'reason_for_visit' | 'scope_of_work' | 'work_performed', current: string | null) {
-    setEditingField(field);
-    setEditValue(current || '');
-  }
-
-  async function saveField() {
-    if (!wo || !editingField) return;
-    setSavingField(true);
-    const patch: Record<string, any> = { [editingField]: editValue.trim() || null, updated_at: new Date().toISOString() };
-    await supabase.from('work_orders').update(patch).eq('id', wo.id);
-    setWo({ ...wo, [editingField]: patch[editingField] } as WorkOrder);
-    setEditingField(null);
-    setEditValue('');
-    setSavingField(false);
-  }
 
   useEffect(() => {
     loadData();
@@ -477,43 +436,18 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onNavigat
               )}
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mb-1">{wo.title}</h1>
-            <div className="flex items-center gap-4 text-sm text-gray-500 flex-wrap">
+            <div className="flex items-center gap-4 text-sm text-gray-500">
               {(wo as any).companies && (
-                <button
-                  onClick={() => onNavigateToCustomer && wo.company_id && onNavigateToCustomer(wo.company_id)}
-                  disabled={!onNavigateToCustomer}
-                  className="flex items-center gap-1 hover:text-blue-700 transition-colors disabled:cursor-default disabled:hover:text-gray-500"
-                >
+                <span className="flex items-center gap-1">
                   <User className="h-3.5 w-3.5" />
                   {(wo as any).companies.name}
-                </button>
+                </span>
               )}
-              {wo.sites && (wo as any).sites?.address ? (
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((wo as any).sites.address)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline transition-colors"
-                >
-                  <MapPin className="h-3.5 w-3.5" />
-                  <span>{wo.sites.name}</span>
-                  <span className="text-xs text-gray-400">· {(wo as any).sites.address}</span>
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              ) : wo.sites ? (
+              {wo.sites && (
                 <span className="flex items-center gap-1">
                   <MapPin className="h-3.5 w-3.5" />
                   {wo.sites.name}
                 </span>
-              ) : null}
-              {(wo as any).customer_systems && (
-                <button
-                  onClick={() => setShowSystemModal(true)}
-                  className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors font-medium text-xs"
-                >
-                  <Shield className="h-3 w-3" />
-                  {(wo as any).customer_systems.name}
-                </button>
               )}
               {wo.scheduled_date && (
                 <span className="flex items-center gap-1">
@@ -652,7 +586,7 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onNavigat
           {[
             { id: 'summary', label: 'Summary', icon: FileText },
             { id: 'line-items', label: `Line Items (${lineItems.length})`, icon: Receipt },
-            { id: 'photos', label: `Photos (${attachmentCount})`, icon: Camera },
+            { id: 'photos', label: `Photos (${attachments.length})`, icon: Camera },
             { id: 'payment', label: 'Payment', icon: CreditCard },
             { id: 'timeline', label: 'Timeline', icon: Activity },
           ].map(tab => (
@@ -679,73 +613,42 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onNavigat
         {activeTab === 'summary' && (
           <div className="grid grid-cols-3 gap-6">
             <div className="col-span-2 space-y-5">
-              <EditableTextCard
-                label="Reason for Visit"
-                value={wo.reason_for_visit}
-                isEditing={editingField === 'reason_for_visit'}
-                editValue={editValue}
-                saving={savingField}
-                onEdit={() => startEdit('reason_for_visit', wo.reason_for_visit)}
-                onChange={setEditValue}
-                onSave={saveField}
-                onCancel={() => { setEditingField(null); setEditValue(''); }}
-                placeholder="What prompted this visit?"
-              />
-              <EditableTextCard
-                label="Scope of Work"
-                value={wo.scope_of_work}
-                isEditing={editingField === 'scope_of_work'}
-                editValue={editValue}
-                saving={savingField}
-                onEdit={() => startEdit('scope_of_work', wo.scope_of_work)}
-                onChange={setEditValue}
-                onSave={saveField}
-                onCancel={() => { setEditingField(null); setEditValue(''); }}
-                placeholder="Describe the planned work…"
-              />
-              <EditableTextCard
-                label="Work Performed"
-                value={(wo as any).work_performed}
-                isEditing={editingField === 'work_performed'}
-                editValue={editValue}
-                saving={savingField}
-                onEdit={() => startEdit('work_performed', (wo as any).work_performed)}
-                onChange={setEditValue}
-                onSave={saveField}
-                onCancel={() => { setEditingField(null); setEditValue(''); }}
-                placeholder="What was actually done on site…"
-                emptyHint="Technicians and office staff can log work performed here."
-                accent="emerald"
-              />
+              {wo.reason_for_visit && (
+                <div className="bg-white rounded-xl border border-gray-100 p-5">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Reason for Visit</h3>
+                  <p className="text-sm text-gray-800 leading-relaxed">{wo.reason_for_visit}</p>
+                </div>
+              )}
+              {wo.scope_of_work && (
+                <div className="bg-white rounded-xl border border-gray-100 p-5">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Scope of Work</h3>
+                  <p className="text-sm text-gray-800 leading-relaxed">{wo.scope_of_work}</p>
+                </div>
+              )}
               {wo.technician_notes && (
                 <div className="bg-white rounded-xl border border-gray-100 p-5">
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Technician Notes</h3>
-                  <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{wo.technician_notes}</p>
+                  <p className="text-sm text-gray-800 leading-relaxed">{wo.technician_notes}</p>
                 </div>
               )}
               {wo.resolution_notes && (
                 <div className="bg-white rounded-xl border border-gray-100 p-5">
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Resolution</h3>
-                  <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{wo.resolution_notes}</p>
+                  <p className="text-sm text-gray-800 leading-relaxed">{wo.resolution_notes}</p>
                 </div>
               )}
               {wo.notes && (
                 <div className="bg-amber-50 rounded-xl border border-amber-200 p-5">
                   <h3 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Internal Notes</h3>
-                  <p className="text-sm text-amber-900 leading-relaxed whitespace-pre-wrap">{wo.notes}</p>
+                  <p className="text-sm text-amber-900 leading-relaxed">{wo.notes}</p>
                 </div>
               )}
-
-              <div className="bg-white rounded-xl border border-gray-100 p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
-                    <Camera className="h-3.5 w-3.5" />
-                    Photos
-                  </h3>
-                  <span className="text-xs text-gray-400">{attachmentCount} file{attachmentCount === 1 ? '' : 's'}</span>
+              {!wo.reason_for_visit && !wo.scope_of_work && !wo.notes && (
+                <div className="text-center py-12 text-gray-400">
+                  <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No notes or descriptions added yet.</p>
                 </div>
-                <WorkOrderPhotos workOrderId={wo.id} />
-              </div>
+              )}
             </div>
 
             <div className="space-y-4">
@@ -934,7 +837,33 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onNavigat
 
         {/* Photos Tab */}
         {activeTab === 'photos' && (
-          <WorkOrderPhotos workOrderId={wo.id} />
+          <div>
+            {attachments.length === 0 ? (
+              <div className="text-center py-16">
+                <Camera className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 font-medium">No photos or attachments yet</p>
+                <p className="text-sm text-gray-400 mt-1">Photos taken in the field will appear here</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-4">
+                {attachments.map(att => (
+                  <div key={att.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                    {att.file_type === 'image' ? (
+                      <img src={att.file_url} alt={att.caption || att.file_name} className="w-full h-40 object-cover" />
+                    ) : (
+                      <div className="w-full h-40 bg-gray-100 flex items-center justify-center">
+                        <FileText className="h-10 w-10 text-gray-400" />
+                      </div>
+                    )}
+                    <div className="p-3">
+                      <p className="text-xs font-medium text-gray-700 truncate">{att.file_name}</p>
+                      {att.caption && <p className="text-xs text-gray-400 mt-0.5">{att.caption}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         {/* Payment Tab */}
@@ -1243,135 +1172,6 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onNavigat
             </div>
           </div>
         </div>
-      )}
-
-      {/* System Details Modal */}
-      {showSystemModal && (wo as any).customer_systems && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowSystemModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
-                  <Shield className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">{(wo as any).customer_systems.name}</h3>
-                  {(wo as any).customer_systems.system_types && (
-                    <p className="text-xs text-gray-500">{(wo as any).customer_systems.system_types.name}</p>
-                  )}
-                </div>
-              </div>
-              <button onClick={() => setShowSystemModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <XIcon className="h-5 w-5 text-gray-500" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-sm">
-              {(wo as any).customer_systems.panel_make && (
-                <SystemRow label="Panel" value={`${(wo as any).customer_systems.panel_make}${(wo as any).customer_systems.panel_model ? ' — ' + (wo as any).customer_systems.panel_model : ''}`} />
-              )}
-              {(wo as any).customer_systems.monitoring_account_number && (
-                <SystemRow label="Monitoring Account" value={(wo as any).customer_systems.monitoring_account_number} />
-              )}
-              {(wo as any).customer_systems.cs_name && (
-                <SystemRow label="Central Station" value={`${(wo as any).customer_systems.cs_name}${(wo as any).customer_systems.cs_number ? ' · ' + (wo as any).customer_systems.cs_number : ''}`} />
-              )}
-              {(wo as any).customer_systems.comm_partner_name && (
-                <SystemRow label="Comm Partner" value={`${(wo as any).customer_systems.comm_partner_name}${(wo as any).customer_systems.comm_account_id ? ' · ' + (wo as any).customer_systems.comm_account_id : ''}`} />
-              )}
-              <div className="flex items-center gap-2">
-                {(wo as any).customer_systems.is_on_test && (
-                  <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">On Test</span>
-                )}
-                {(wo as any).customer_systems.is_out_of_service && (
-                  <span className="text-xs font-semibold text-red-700 bg-red-100 px-2 py-0.5 rounded-full">Out of Service</span>
-                )}
-              </div>
-            </div>
-
-            {onNavigateToCustomer && wo.company_id && (
-              <button
-                onClick={() => { setShowSystemModal(false); onNavigateToCustomer(wo.company_id); }}
-                className="mt-5 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700"
-              >
-                <ExternalLink className="h-4 w-4" />
-                Open Customer Profile
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SystemRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-4">
-      <span className="text-gray-500">{label}</span>
-      <span className="font-medium text-gray-900 text-right">{value}</span>
-    </div>
-  );
-}
-
-interface EditableTextCardProps {
-  label: string;
-  value: string | null | undefined;
-  isEditing: boolean;
-  editValue: string;
-  saving: boolean;
-  onEdit: () => void;
-  onChange: (v: string) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  placeholder?: string;
-  emptyHint?: string;
-  accent?: 'blue' | 'emerald';
-}
-
-function EditableTextCard({
-  label, value, isEditing, editValue, saving,
-  onEdit, onChange, onSave, onCancel, placeholder, emptyHint, accent = 'blue',
-}: EditableTextCardProps) {
-  const accentRing = accent === 'emerald' ? 'focus:ring-emerald-500' : 'focus:ring-blue-500';
-  const accentBtn = accent === 'emerald' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700';
-  return (
-    <div className="bg-white rounded-xl border border-gray-100 p-5 group">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</h3>
-        {!isEditing && (
-          <button onClick={onEdit} className="inline-flex items-center gap-1 text-xs text-blue-600 opacity-0 group-hover:opacity-100 hover:underline transition-opacity">
-            <Pencil className="h-3 w-3" />
-            {value ? 'Edit' : 'Add'}
-          </button>
-        )}
-      </div>
-      {isEditing ? (
-        <div className="space-y-2">
-          <textarea
-            autoFocus
-            value={editValue}
-            onChange={e => onChange(e.target.value)}
-            rows={4}
-            placeholder={placeholder}
-            className={`w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 ${accentRing} resize-y placeholder-gray-400 bg-gray-50`}
-          />
-          <div className="flex items-center gap-2 justify-end">
-            <button onClick={onCancel} disabled={saving} className="px-3 py-1.5 text-xs font-medium text-gray-700 rounded-md border border-gray-200 hover:bg-gray-50 disabled:opacity-60">
-              Cancel
-            </button>
-            <button onClick={onSave} disabled={saving} className={`px-3 py-1.5 text-xs font-semibold text-white rounded-md ${accentBtn} disabled:opacity-60`}>
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-          </div>
-        </div>
-      ) : value ? (
-        <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{value}</p>
-      ) : (
-        <button onClick={onEdit} className="text-sm text-gray-400 italic hover:text-blue-600 transition-colors">
-          {emptyHint || `Click to add ${label.toLowerCase()}…`}
-        </button>
       )}
     </div>
   );

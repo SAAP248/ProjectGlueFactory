@@ -50,8 +50,6 @@ export default function TechnicianPortal() {
         completed_at,
         paused_at,
         total_paused_minutes,
-        current_pause_reason,
-        current_pause_notes,
         scheduled_date,
         scheduled_start_time,
         scheduled_end_time,
@@ -136,8 +134,6 @@ export default function TechnicianPortal() {
             : null,
           wot_paused_at: row.paused_at,
           wot_total_paused_minutes: row.total_paused_minutes,
-          wot_current_pause_reason: row.current_pause_reason,
-          wot_current_pause_notes: row.current_pause_notes,
           wot_scheduled_date: row.scheduled_date,
           wot_scheduled_start_time: row.scheduled_start_time,
           wot_scheduled_end_time: row.scheduled_end_time,
@@ -163,8 +159,6 @@ export default function TechnicianPortal() {
       signature?: string | null;
       paymentCollected?: number | null;
       paymentMethod?: string | null;
-      pauseReason?: string | null;
-      pauseNotes?: string | null;
     }
   ) {
     await runLifecycleAction(

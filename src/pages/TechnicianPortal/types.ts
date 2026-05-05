@@ -51,8 +51,6 @@ export interface TechWO {
   wot_drive_minutes: number | null;
   wot_paused_at: string | null;
   wot_total_paused_minutes: number | null;
-  wot_current_pause_reason: string | null;
-  wot_current_pause_notes: string | null;
   wot_scheduled_date: string | null;
   wot_scheduled_start_time: string | null;
   wot_scheduled_end_time: string | null;
@@ -64,18 +62,12 @@ export interface TechWO {
 export type TechAction =
   | 'start_driving'
   | 'arrived'
+  | 'begin_work'
   | 'take_break'
   | 'resume_work'
   | 'complete'
   | 'cannot_complete'
   | 'go_back';
-
-export interface PauseReason {
-  id: string;
-  label: string;
-  sort_order: number;
-  is_active: boolean;
-}
 
 export interface Employee {
   id: string;

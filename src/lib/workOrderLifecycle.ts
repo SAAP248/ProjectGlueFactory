@@ -3,6 +3,7 @@ import { supabase } from './supabase';
 export type LifecycleAction =
   | 'start_driving'
   | 'arrived'
+  | 'begin_work'
   | 'take_break'
   | 'resume_work'
   | 'complete'
@@ -25,8 +26,6 @@ export interface LifecycleExtras {
   signature?: string | null;
   paymentCollected?: number | null;
   paymentMethod?: string | null;
-  pauseReason?: string | null;
-  pauseNotes?: string | null;
 }
 
 export async function runLifecycleAction(
@@ -53,34 +52,30 @@ export async function runLifecycleAction(
       timeEntry.entry_type = 'start_drive';
       break;
     case 'arrived':
-      wotUpdate.status = 'working';
+      wotUpdate.status = 'onsite';
       wotUpdate.onsite_at = now;
-      wotUpdate.work_started_at = now;
       woUpdate.onsite_at = now;
       timeEntry.entry_type = 'arrived';
+      break;
+    case 'begin_work':
+      wotUpdate.status = 'working';
+      wotUpdate.work_started_at = now;
+      timeEntry.entry_type = 'start_work';
       break;
     case 'take_break':
       wotUpdate.status = 'on_break';
       wotUpdate.paused_at = now;
-      wotUpdate.current_pause_reason = extras?.pauseReason ?? null;
-      wotUpdate.current_pause_notes = extras?.pauseNotes ?? null;
       timeEntry.entry_type = 'paused';
-      timeEntry.pause_reason = extras?.pauseReason ?? null;
-      timeEntry.pause_notes = extras?.pauseNotes ?? null;
       break;
     case 'resume_work': {
       wotUpdate.status = 'working';
       wotUpdate.paused_at = null;
-      wotUpdate.current_pause_reason = null;
-      wotUpdate.current_pause_notes = null;
-      let addMin = 0;
       if (ctx.pausedAt) {
         const pausedMs = new Date(now).getTime() - new Date(ctx.pausedAt).getTime();
-        addMin = Math.max(0, Math.round(pausedMs / 60000));
+        const addMin = Math.max(0, Math.round(pausedMs / 60000));
         wotUpdate.total_paused_minutes = (ctx.totalPausedMinutes || 0) + addMin;
       }
       timeEntry.entry_type = 'resumed';
-      timeEntry.duration_minutes = addMin;
       break;
     }
     case 'complete':

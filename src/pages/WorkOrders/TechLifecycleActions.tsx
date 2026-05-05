@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Car, MapPin, Coffee, Play, CheckCircle, AlertCircle, RotateCcw, X as XIcon } from 'lucide-react';
+import { Car, MapPin, Wrench, Coffee, Play, CheckCircle, AlertCircle, RotateCcw, X as XIcon } from 'lucide-react';
 import { runLifecycleAction, type LifecycleAction } from '../../lib/workOrderLifecycle';
 
 export interface LifecycleTech {
@@ -35,6 +35,10 @@ function getActions(status: string): ActionDef[] {
     case 'enroute':
       return [{ label: 'Arrived', action: 'arrived', color: 'bg-teal-600 hover:bg-teal-700', icon: MapPin }];
     case 'onsite':
+      return [
+        { label: 'Begin Work', action: 'begin_work', color: 'bg-emerald-600 hover:bg-emerald-700', icon: Wrench },
+        { label: 'Pause', action: 'take_break', color: 'bg-amber-500 hover:bg-amber-600', icon: Coffee },
+      ];
     case 'working':
       return [
         { label: 'Complete', action: 'complete', color: 'bg-emerald-600 hover:bg-emerald-700', icon: CheckCircle, needsCompleteModal: true },
@@ -52,7 +56,7 @@ function getActions(status: string): ActionDef[] {
 const STATUS_LABEL: Record<string, string> = {
   assigned: 'Assigned',
   enroute: 'Enroute',
-  onsite: 'Working',
+  onsite: 'On Site',
   working: 'Working',
   on_break: 'On Break',
   completed: 'Completed',
