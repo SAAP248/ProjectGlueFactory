@@ -10,8 +10,8 @@ export default function Chat() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Chat</h1>
-        <p className="text-gray-600 mt-1">SMS communications with customers</p>
+        <h1 className="text-2xl font-bold text-gray-900">Messages</h1>
+        <p className="text-gray-600 mt-1">SMS communications with customers and users</p>
       </div>
 
       <div className="grid grid-cols-3 gap-6">

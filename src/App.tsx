@@ -9,6 +9,7 @@ import Calendar from './pages/Calendar';
 import Customers from './pages/Customers';
 import CustomerProfile from './pages/CustomerProfile/index';
 import Chat from './pages/Chat';
+import TeamChat from './pages/TeamChat';
 import Deals from './pages/Deals/index';
 import ProjectManagement from './pages/ProjectManagement/index';
 import WorkOrders from './pages/WorkOrders/index';
@@ -67,6 +68,8 @@ function App() {
         );
       case 'chat':
         return <Chat />;
+      case 'team-chat':
+        return <TeamChat />;
       case 'leads':
         return <Leads />;
       case 'deals':

@@ -28,6 +28,7 @@ import {
   PhoneCall,
   Camera,
   FileText,
+  Hash,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -43,7 +44,8 @@ const topNavItems = [
   { id: 'dispatch-map', label: 'Dispatch Map', icon: MapPin },
   { id: 'calendar', label: 'Calendar', icon: Calendar },
   { id: 'customers', label: 'Customers', icon: Users },
-  { id: 'chat', label: 'Chat', icon: MessageSquare },
+  { id: 'chat', label: 'Messages', icon: MessageSquare },
+  { id: 'team-chat', label: 'Team Chat', icon: Hash },
   { id: 'leads', label: 'Leads', icon: PhoneCall },
   { id: 'photos', label: 'Photos', icon: Camera },
   { id: 'documents', label: 'Documents', icon: FileText },
