@@ -3,6 +3,7 @@ import {
   Bell,
   Calendar,
   MapPin,
+  Radio,
   Users,
   MessageSquare,
   TrendingUp,
@@ -40,8 +41,7 @@ interface SidebarProps {
 
 const topNavItems = [
   { id: 'alarm-dashboard', label: 'Alarm Dashboard', icon: Bell },
-  { id: 'dispatch-calendar', label: 'Dispatch Calendar', icon: Calendar },
-  { id: 'dispatch-map', label: 'Dispatch Map', icon: MapPin },
+  { id: 'dispatch', label: 'Dispatch', icon: Radio },
   { id: 'calendar', label: 'Calendar', icon: Calendar },
   { id: 'customers', label: 'Customers', icon: Users },
   { id: 'chat', label: 'Messages', icon: MessageSquare },

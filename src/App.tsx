@@ -3,8 +3,7 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Dashboard from './pages/Dashboard/index';
 import AlarmDashboard from './pages/AlarmDashboard';
-import DispatchCalendar from './pages/DispatchCalendar';
-import DispatchMap from './pages/DispatchMap';
+import Dispatch from './pages/Dispatch/index';
 import Calendar from './pages/Calendar';
 import Customers from './pages/Customers';
 import CustomerProfile from './pages/CustomerProfile/index';
@@ -50,10 +49,8 @@ function App() {
         return <Dashboard onNavigate={setCurrentPage} />;
       case 'alarm-dashboard':
         return <AlarmDashboard />;
-      case 'dispatch-calendar':
-        return <DispatchCalendar />;
-      case 'dispatch-map':
-        return <DispatchMap />;
+      case 'dispatch':
+        return <Dispatch />;
       case 'calendar':
         return <Calendar />;
       case 'customers':

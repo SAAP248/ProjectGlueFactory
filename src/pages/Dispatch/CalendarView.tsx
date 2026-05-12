@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Wrench, PhoneCall } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import ViewTypeFilter, { type ViewType } from '../components/ViewTypeFilter';
-import type { Lead } from './Leads/types';
-import LeadSlideOver from './Leads/LeadSlideOver';
-import LeadFormModal from './Leads/LeadFormModal';
-import NewDealWizard from './Deals/NewDealWizard/index';
-import WorkOrderSlideOver from './WorkOrders/WorkOrderSlideOver';
+import { supabase } from '../../lib/supabase';
+import ViewTypeFilter, { type ViewType } from '../../components/ViewTypeFilter';
+import type { Lead } from '../Leads/types';
+import LeadSlideOver from '../Leads/LeadSlideOver';
+import LeadFormModal from '../Leads/LeadFormModal';
+import NewDealWizard from '../Deals/NewDealWizard/index';
+import WorkOrderSlideOver from '../WorkOrders/WorkOrderSlideOver';
 
 interface Appointment {
   id: string;
@@ -25,7 +25,6 @@ interface Appointment {
     employees?: { first_name: string; last_name: string } | null;
   } | null;
   work_orders?: { id: string; title: string; customer_name: string } | null;
-  // synthetic flag for WO tech assignments
   __woTechAssignment?: {
     workOrderId: string;
     woNumber: string;
@@ -44,7 +43,7 @@ function isWorkOrder(appt: Appointment) {
   return !!appt.__woTechAssignment || !!appt.work_order_id;
 }
 
-export default function DispatchCalendar() {
+export default function CalendarView() {
   const [viewDate, setViewDate] = useState(new Date());
   const [calView, setCalView] = useState<'month' | 'week' | 'day'>('month');
   const [viewType, setViewType] = useState<ViewType>('all');
@@ -178,21 +177,7 @@ export default function DispatchCalendar() {
   }
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dispatch Calendar</h1>
-          <p className="text-gray-600 mt-1">Schedule and manage work orders and sales appointments</p>
-        </div>
-        <button
-          onClick={() => setShowNewLead(true)}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium text-sm shadow-sm transition-colors"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          New Lead / Appt
-        </button>
-      </div>
-
+    <div>
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
         <div className="p-5 border-b border-gray-100 flex flex-wrap items-center gap-4 justify-between">
           <div className="flex items-center gap-3">
@@ -226,6 +211,13 @@ export default function DispatchCalendar() {
                 </button>
               ))}
             </div>
+            <button
+              onClick={() => setShowNewLead(true)}
+              className="flex items-center px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold text-xs shadow-sm transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              New Lead / Appt
+            </button>
           </div>
         </div>
 
@@ -331,9 +323,7 @@ export default function DispatchCalendar() {
                     <div className="min-w-0">
                       {woAssign ? (
                         <>
-                          <p className="text-sm font-semibold text-gray-900 truncate">
-                            {woAssign.woTitle}
-                          </p>
+                          <p className="text-sm font-semibold text-gray-900 truncate">{woAssign.woTitle}</p>
                           <p className="text-xs text-gray-500 truncate">
                             <span className="font-mono">{woAssign.woNumber}</span>
                             {' · '}
