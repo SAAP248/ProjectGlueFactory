@@ -13,7 +13,6 @@ import AccountingTab from './AccountingTab';
 import WorkOrdersTab from './WorkOrdersTab';
 import ContactsTab from './ContactsTab';
 import CommunicationsTab from './CommunicationsTab';
-import SubCustomersTab from './SubCustomersTab';
 import PhotoGallery from '../Photos/PhotoGallery';
 import DocumentGallery from '../Documents/DocumentGallery';
 
@@ -73,7 +72,7 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer }: 
   const [parent, setParent] = useState<ParentSummary | null>(null);
   const [subCustomers, setSubCustomers] = useState<SubCustomerSummary[]>([]);
 
-  const baseTabs = [
+  const TABS = [
     { id: 'overview', label: 'Overview' },
     { id: 'sites-systems', label: 'Sites & Systems' },
     { id: 'accounting', label: 'Accounting' },
@@ -83,10 +82,6 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer }: 
     { id: 'photos', label: 'Photos' },
     { id: 'documents', label: 'Documents' },
   ];
-  const canHaveSubs = !!company && !company.parent_company_id;
-  const TABS = canHaveSubs
-    ? [baseTabs[0], { id: 'sub-customers', label: 'Sub-customers' }, ...baseTabs.slice(1)]
-    : baseTabs;
 
   useEffect(() => {
     if (customerId) loadAll(customerId);
@@ -193,9 +188,6 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer }: 
       const unreadSms = smsMessages.filter(s => !s.is_read && s.direction === 'inbound').length;
       const total = unreadEmails + unreadSms;
       return total > 0 ? total : null;
-    }
-    if (tabId === 'sub-customers') {
-      return subCustomers.length > 0 ? subCustomers.length : null;
     }
     return null;
   };
@@ -564,13 +556,6 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer }: 
             systemsCount={systems.length}
             sitesCount={sites.length}
             onNavigate={setActiveTab}
-          />
-        )}
-        {activeTab === 'sub-customers' && canHaveSubs && (
-          <SubCustomersTab
-            parentCompanyId={company.id}
-            parentName={company.name}
-            onViewCustomer={onViewCustomer}
           />
         )}
         {activeTab === 'sites-systems' && (
