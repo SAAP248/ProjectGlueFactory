@@ -1,5 +1,7 @@
 import { RefreshCw, Loader2 } from 'lucide-react';
 import { useDashboardData } from './useDashboardData';
+import { useRole } from '../../contexts/RoleContext';
+import { ROLE_WIDGETS, ROLE_GREETING } from '../../config/roleDashboard';
 import KpiRow from './KpiRow';
 import RevenueChart from './RevenueChart';
 import SalesPipeline from './SalesPipeline';
@@ -16,6 +18,9 @@ interface Props {
 
 export default function Dashboard({ onNavigate }: Props) {
   const { data, loading, error, reload } = useDashboardData();
+  const { role } = useRole();
+  const widgets = ROLE_WIDGETS[role];
+  const has = (w: typeof widgets[number]) => widgets.includes(w);
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -39,7 +44,9 @@ export default function Dashboard({ onNavigate }: Props) {
     <div className="p-6 space-y-6 bg-gray-50 min-h-full">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{greeting}, Admin</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {greeting}, {ROLE_GREETING[role]}
+          </h1>
           <p className="text-sm text-gray-500 mt-1">{today} — here's your operations overview.</p>
         </div>
         <button
@@ -65,30 +72,46 @@ export default function Dashboard({ onNavigate }: Props) {
         </div>
       ) : data ? (
         <>
-          <KpiRow kpis={data.kpis} />
+          {has('kpis') && <KpiRow kpis={data.kpis} />}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2">
-              <RevenueChart data={data.revenueTrend} />
+          {(has('revenue_chart') || has('quick_actions')) && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {has('revenue_chart') && (
+                <div className="lg:col-span-2">
+                  <RevenueChart data={data.revenueTrend} />
+                </div>
+              )}
+              {has('quick_actions') && <QuickActions onNavigate={navigate} />}
             </div>
-            <QuickActions onNavigate={navigate} />
-          </div>
+          )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <AlarmFeed alarms={data.alarms} unackedCount={data.kpis.unackedAlarms} />
-            <TodaySchedule
-              jobs={data.schedule}
-              jobsToday={data.kpis.jobsToday}
-              completedToday={data.kpis.jobsCompletedToday}
-            />
-            <TicketsPanel tickets={data.tickets} />
-          </div>
+          {(has('alarm_feed') || has('today_schedule') || has('tickets_panel')) && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {has('alarm_feed') && (
+                <AlarmFeed alarms={data.alarms} unackedCount={data.kpis.unackedAlarms} />
+              )}
+              {has('today_schedule') && (
+                <TodaySchedule
+                  jobs={data.schedule}
+                  jobsToday={data.kpis.jobsToday}
+                  completedToday={data.kpis.jobsCompletedToday}
+                />
+              )}
+              {has('tickets_panel') && <TicketsPanel tickets={data.tickets} />}
+            </div>
+          )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <SalesPipeline pipeline={data.pipeline} topDeals={data.topDeals} />
-            <FinancialHealth aging={data.aging} transactions={data.transactions} />
-            <TeamActivity techs={data.techsOnClock} />
-          </div>
+          {(has('sales_pipeline') || has('financial_health') || has('team_activity')) && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {has('sales_pipeline') && (
+                <SalesPipeline pipeline={data.pipeline} topDeals={data.topDeals} />
+              )}
+              {has('financial_health') && (
+                <FinancialHealth aging={data.aging} transactions={data.transactions} />
+              )}
+              {has('team_activity') && <TeamActivity techs={data.techsOnClock} />}
+            </div>
+          )}
         </>
       ) : null}
     </div>

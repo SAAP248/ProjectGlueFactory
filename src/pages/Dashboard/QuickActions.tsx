@@ -1,18 +1,52 @@
-import { Plus, Briefcase, TrendingUp, FileText, Ticket, Users } from 'lucide-react';
+import {
+  Plus,
+  Briefcase,
+  TrendingUp,
+  FileText,
+  Ticket,
+  Users,
+  DollarSign,
+  PhoneCall,
+  BarChart3,
+  Calendar,
+  MessageSquare,
+  Radio,
+  Hash,
+  Clock,
+  Package,
+  Smartphone,
+} from 'lucide-react';
+import { useRole } from '../../contexts/RoleContext';
+import { ROLE_QUICK_ACTIONS } from '../../config/roleDashboard';
+import type { ElementType } from 'react';
 
 interface Props {
   onNavigate: (page: string) => void;
 }
 
-const actions = [
-  { label: 'New Deal', icon: TrendingUp, page: 'deals', color: 'bg-amber-500 hover:bg-amber-600' },
-  { label: 'New Work Order', icon: Briefcase, page: 'work-orders', color: 'bg-blue-500 hover:bg-blue-600' },
-  { label: 'New Ticket', icon: Ticket, page: 'tickets', color: 'bg-orange-500 hover:bg-orange-600' },
-  { label: 'New Estimate', icon: FileText, page: 'estimates', color: 'bg-teal-500 hover:bg-teal-600' },
-  { label: 'New Customer', icon: Users, page: 'customers', color: 'bg-sky-500 hover:bg-sky-600' },
-];
+const ICON_MAP: Record<string, ElementType> = {
+  TrendingUp,
+  Briefcase,
+  Ticket,
+  FileText,
+  Users,
+  DollarSign,
+  PhoneCall,
+  BarChart3,
+  Calendar,
+  MessageSquare,
+  Radio,
+  Hash,
+  Clock,
+  Package,
+  Smartphone,
+  Plus,
+};
 
 export default function QuickActions({ onNavigate }: Props) {
+  const { role } = useRole();
+  const actions = ROLE_QUICK_ACTIONS[role];
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
       <div className="flex items-center gap-2 mb-4">
@@ -21,7 +55,7 @@ export default function QuickActions({ onNavigate }: Props) {
       </div>
       <div className="grid grid-cols-2 gap-2">
         {actions.map((a) => {
-          const Icon = a.icon;
+          const Icon = ICON_MAP[a.icon] || Plus;
           return (
             <button
               key={a.label}

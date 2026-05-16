@@ -1,6 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
+import { useRole } from './contexts/RoleContext';
+import { canAccessPage } from './config/roleAccess';
+import { ROLE_META } from './config/roles';
 import Dashboard from './pages/Dashboard/index';
 import AlarmDashboard from './pages/AlarmDashboard';
 import Dispatch from './pages/Dispatch/index';
@@ -34,9 +37,20 @@ import PhotosPage from './pages/Photos/index';
 import DocumentsPage from './pages/Documents/index';
 
 function App() {
-  const [currentPage, setCurrentPage] = useState('dashboard');
+  const { role } = useRole();
+  const [currentPage, setCurrentPage] = useState(() => ROLE_META[role].defaultPage);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!canAccessPage(role, currentPage)) {
+      setCurrentPage(ROLE_META[role].defaultPage);
+    }
+  }, [role, currentPage]);
+
+  const handleRoleChange = useCallback(() => {
+    // Will be handled by the useEffect above
+  }, []);
 
   const navigateToCustomer = (customerId: string) => {
     setSelectedCustomerId(customerId);
@@ -129,6 +143,7 @@ function App() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header
           onMenuClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onRoleChange={handleRoleChange}
         />
         <main className="flex-1 overflow-y-auto">
           {renderPage()}

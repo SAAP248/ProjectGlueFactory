@@ -31,6 +31,8 @@ import {
   FileText,
   Hash,
 } from 'lucide-react';
+import { useRole } from '../contexts/RoleContext';
+import { canAccessPage } from '../config/roleAccess';
 
 interface SidebarProps {
   currentPage: string;
@@ -95,6 +97,7 @@ function formatTime(date: Date) {
 }
 
 export default function Sidebar({ currentPage, setCurrentPage, collapsed, setCollapsed }: SidebarProps) {
+  const { role, meta } = useRole();
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [accountingOpen, setAccountingOpen] = useState(false);
   const [isClockedIn, setIsClockedIn] = useState(false);
@@ -121,8 +124,14 @@ export default function Sidebar({ currentPage, setCurrentPage, collapsed, setCol
     }
   };
 
-  const isInventoryActive = inventoryItems.some(i => i.id === currentPage);
-  const isAccountingActive = accountingItems.some(i => i.id === currentPage);
+  const filteredTopNav = topNavItems.filter(i => canAccessPage(role, i.id));
+  const filteredInventory = inventoryItems.filter(i => canAccessPage(role, i.id));
+  const filteredAccounting = accountingItems.filter(i => canAccessPage(role, i.id));
+  const filteredBottom = bottomNavItems.filter(i => canAccessPage(role, i.id));
+  const filteredPortals = portalItems.filter(i => canAccessPage(role, i.id));
+
+  const isInventoryActive = filteredInventory.some(i => i.id === currentPage);
+  const isAccountingActive = filteredAccounting.some(i => i.id === currentPage);
 
   const renderNavButton = (item: { id: string; label: string; icon: React.ElementType }, indented = false) => {
     const isActive = currentPage === item.id;
@@ -180,11 +189,11 @@ export default function Sidebar({ currentPage, setCurrentPage, collapsed, setCol
           <div className={`rounded-xl p-3 ${isClockedIn ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'}`}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center space-x-2">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white ${isClockedIn ? 'bg-green-500' : 'bg-gray-400'}`}>
-                  JD
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white ${isClockedIn ? 'bg-green-500' : meta.avatarBg}`}>
+                  {meta.shortLabel.slice(0, 2).toUpperCase()}
                 </div>
                 <div>
-                  <div className="text-xs font-semibold text-gray-900 leading-tight">John Doe</div>
+                  <div className="text-xs font-semibold text-gray-900 leading-tight">{meta.shortLabel}</div>
                   <div className={`text-xs leading-tight ${isClockedIn ? 'text-green-600' : 'text-gray-500'}`}>
                     {isClockedIn ? 'Clocked In' : 'Clocked Out'}
                   </div>
@@ -220,64 +229,70 @@ export default function Sidebar({ currentPage, setCurrentPage, collapsed, setCol
 
       {/* Nav Items */}
       <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
-        {topNavItems.map(item => renderNavButton(item))}
+        {filteredTopNav.map(item => renderNavButton(item))}
 
         {/* Inventory Dropdown */}
-        <div>
-          <button
-            onClick={() => !collapsed && setInventoryOpen(o => !o)}
-            className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
-              isInventoryActive ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            <Package className={`h-5 w-5 flex-shrink-0 ${collapsed ? '' : 'mr-3'}`} />
-            {!collapsed && (
-              <>
-                <span className="flex-1 truncate text-left">Inventory</span>
-                <ChevronDown className={`h-4 w-4 flex-shrink-0 transition-transform ${inventoryOpen ? 'rotate-0' : '-rotate-90'}`} />
-              </>
+        {filteredInventory.length > 0 && (
+          <div>
+            <button
+              onClick={() => !collapsed && setInventoryOpen(o => !o)}
+              className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+                isInventoryActive ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <Package className={`h-5 w-5 flex-shrink-0 ${collapsed ? '' : 'mr-3'}`} />
+              {!collapsed && (
+                <>
+                  <span className="flex-1 truncate text-left">Inventory</span>
+                  <ChevronDown className={`h-4 w-4 flex-shrink-0 transition-transform ${inventoryOpen ? 'rotate-0' : '-rotate-90'}`} />
+                </>
+              )}
+            </button>
+            {!collapsed && inventoryOpen && (
+              <div className="mt-0.5 space-y-0.5">
+                {filteredInventory.map(item => renderNavButton(item, true))}
+              </div>
             )}
-          </button>
-          {!collapsed && inventoryOpen && (
-            <div className="mt-0.5 space-y-0.5">
-              {inventoryItems.map(item => renderNavButton(item, true))}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Accounting Dropdown */}
-        <div>
-          <button
-            onClick={() => !collapsed && setAccountingOpen(o => !o)}
-            className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
-              isAccountingActive ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            <DollarSign className={`h-5 w-5 flex-shrink-0 ${collapsed ? '' : 'mr-3'}`} />
-            {!collapsed && (
-              <>
-                <span className="flex-1 truncate text-left">Accounting</span>
-                <ChevronDown className={`h-4 w-4 flex-shrink-0 transition-transform ${accountingOpen ? 'rotate-0' : '-rotate-90'}`} />
-              </>
+        {filteredAccounting.length > 0 && (
+          <div>
+            <button
+              onClick={() => !collapsed && setAccountingOpen(o => !o)}
+              className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+                isAccountingActive ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <DollarSign className={`h-5 w-5 flex-shrink-0 ${collapsed ? '' : 'mr-3'}`} />
+              {!collapsed && (
+                <>
+                  <span className="flex-1 truncate text-left">Accounting</span>
+                  <ChevronDown className={`h-4 w-4 flex-shrink-0 transition-transform ${accountingOpen ? 'rotate-0' : '-rotate-90'}`} />
+                </>
+              )}
+            </button>
+            {!collapsed && accountingOpen && (
+              <div className="mt-0.5 space-y-0.5">
+                {filteredAccounting.map(item => renderNavButton(item, true))}
+              </div>
             )}
-          </button>
-          {!collapsed && accountingOpen && (
-            <div className="mt-0.5 space-y-0.5">
-              {accountingItems.map(item => renderNavButton(item, true))}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {bottomNavItems.map(item => renderNavButton(item))}
+        {filteredBottom.map(item => renderNavButton(item))}
       </nav>
 
       {/* Portals section — pinned at bottom above footer */}
-      <div className="border-t border-gray-200 p-3 space-y-0.5 flex-shrink-0">
-        {!collapsed && (
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 pb-1">Portals</p>
-        )}
-        {portalItems.map(item => renderNavButton(item))}
-      </div>
+      {filteredPortals.length > 0 && (
+        <div className="border-t border-gray-200 p-3 space-y-0.5 flex-shrink-0">
+          {!collapsed && (
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 pb-1">Portals</p>
+          )}
+          {filteredPortals.map(item => renderNavButton(item))}
+        </div>
+      )}
 
       <div className="p-3 border-t border-gray-200 flex-shrink-0">
         <div className={`text-xs text-gray-400 ${collapsed ? 'text-center' : ''}`}>
