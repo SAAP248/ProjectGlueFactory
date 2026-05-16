@@ -9,7 +9,44 @@ export type DashboardWidget =
   | 'tickets_panel'
   | 'sales_pipeline'
   | 'financial_health'
-  | 'team_activity';
+  | 'team_activity'
+  | 'dispatch_timeline';
+
+export type KpiKey =
+  | 'activeCustomers'
+  | 'mtdRevenue'
+  | 'mrr'
+  | 'pipelineValue'
+  | 'openWorkOrders'
+  | 'overdueAR'
+  | 'openTickets'
+  | 'unackedAlarms'
+  | 'scheduledToday'
+  | 'completedToday'
+  | 'techsOnClock';
+
+const ALL_KPIS: KpiKey[] = [
+  'activeCustomers',
+  'mtdRevenue',
+  'mrr',
+  'pipelineValue',
+  'openWorkOrders',
+  'overdueAR',
+  'openTickets',
+  'unackedAlarms',
+];
+
+export const ROLE_KPIS: Record<Role, KpiKey[]> = {
+  admin: ALL_KPIS,
+  accounting: ['mtdRevenue', 'mrr', 'overdueAR', 'activeCustomers', 'openWorkOrders', 'pipelineValue'],
+  sales_manager: ['pipelineValue', 'mtdRevenue', 'activeCustomers', 'openTickets', 'mrr', 'openWorkOrders'],
+  sales: ['pipelineValue', 'mtdRevenue', 'activeCustomers', 'openTickets'],
+  csr: ['openTickets', 'openWorkOrders', 'unackedAlarms', 'scheduledToday', 'activeCustomers'],
+  dispatcher: ['openWorkOrders', 'scheduledToday', 'completedToday', 'techsOnClock', 'unackedAlarms', 'openTickets'],
+  tech_manager: ['openWorkOrders', 'scheduledToday', 'completedToday', 'techsOnClock', 'unackedAlarms', 'openTickets'],
+  tech: ['scheduledToday', 'completedToday', 'openWorkOrders'],
+  limited_tech: ['scheduledToday', 'completedToday'],
+};
 
 export const ROLE_WIDGETS: Record<Role, DashboardWidget[]> = {
   admin: [
@@ -59,8 +96,8 @@ export const ROLE_WIDGETS: Record<Role, DashboardWidget[]> = {
 
   dispatcher: [
     'kpis',
+    'dispatch_timeline',
     'quick_actions',
-    'today_schedule',
     'alarm_feed',
     'team_activity',
     'tickets_panel',
@@ -68,6 +105,7 @@ export const ROLE_WIDGETS: Record<Role, DashboardWidget[]> = {
 
   tech_manager: [
     'kpis',
+    'dispatch_timeline',
     'quick_actions',
     'today_schedule',
     'team_activity',

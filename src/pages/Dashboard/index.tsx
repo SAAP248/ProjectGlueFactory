@@ -11,6 +11,7 @@ import TodaySchedule from './TodaySchedule';
 import TicketsPanel from './TicketsPanel';
 import TeamActivity from './TeamActivity';
 import QuickActions from './QuickActions';
+import DispatchTimeline from './DispatchTimeline';
 
 interface Props {
   onNavigate?: (page: string) => void;
@@ -73,6 +74,8 @@ export default function Dashboard({ onNavigate }: Props) {
       ) : data ? (
         <>
           {has('kpis') && <KpiRow kpis={data.kpis} />}
+
+          {has('dispatch_timeline') && <DispatchTimeline />}
 
           {(has('revenue_chart') || has('quick_actions')) && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

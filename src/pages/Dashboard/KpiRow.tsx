@@ -1,14 +1,18 @@
-import { Users, Briefcase, DollarSign, TrendingUp, AlertTriangle, Repeat, FileWarning, Ticket, Video as LucideIcon, ArrowUpRight, ArrowDownRight } from 'lucide-react';
-import { DashboardKpis } from './useDashboardData';
+import { Users, Briefcase, DollarSign, TrendingUp, AlertTriangle, Repeat, FileWarning, Ticket, Clock, CheckCircle2, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import type { ElementType } from 'react';
+import { useRole } from '../../contexts/RoleContext';
+import { ROLE_KPIS, type KpiKey } from '../../config/roleDashboard';
+import type { DashboardKpis } from './useDashboardData';
 
 interface Props {
   kpis: DashboardKpis;
 }
 
 interface Kpi {
+  key: KpiKey;
   label: string;
   value: string;
-  icon: LucideIcon;
+  icon: ElementType;
   iconColor: string;
   iconBg: string;
   delta?: { value: string; positive: boolean };
@@ -24,6 +28,9 @@ const fullMoney = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
 export default function KpiRow({ kpis }: Props) {
+  const { role } = useRole();
+  const visibleKeys = ROLE_KPIS[role];
+
   const revenueDelta =
     kpis.prevMonthRevenue > 0
       ? ((kpis.monthRevenue - kpis.prevMonthRevenue) / kpis.prevMonthRevenue) * 100
@@ -31,8 +38,9 @@ export default function KpiRow({ kpis }: Props) {
       ? 100
       : 0;
 
-  const items: Kpi[] = [
+  const allItems: Kpi[] = [
     {
+      key: 'activeCustomers',
       label: 'Active Customers',
       value: kpis.activeCustomers.toLocaleString(),
       icon: Users,
@@ -40,6 +48,7 @@ export default function KpiRow({ kpis }: Props) {
       iconBg: 'bg-blue-50',
     },
     {
+      key: 'mtdRevenue',
       label: 'MTD Revenue',
       value: fullMoney(kpis.monthRevenue),
       icon: DollarSign,
@@ -52,6 +61,7 @@ export default function KpiRow({ kpis }: Props) {
       sub: 'vs last month',
     },
     {
+      key: 'mrr',
       label: 'Monthly Recurring',
       value: fullMoney(kpis.mrr),
       icon: Repeat,
@@ -60,6 +70,7 @@ export default function KpiRow({ kpis }: Props) {
       sub: 'RMR contracts',
     },
     {
+      key: 'pipelineValue',
       label: 'Pipeline Value',
       value: money(kpis.pipelineValue),
       icon: TrendingUp,
@@ -68,6 +79,7 @@ export default function KpiRow({ kpis }: Props) {
       sub: `${kpis.activeDeals} active deals`,
     },
     {
+      key: 'openWorkOrders',
       label: 'Open Work Orders',
       value: kpis.openWorkOrders.toLocaleString(),
       icon: Briefcase,
@@ -76,6 +88,7 @@ export default function KpiRow({ kpis }: Props) {
       sub: `${kpis.jobsToday} scheduled today`,
     },
     {
+      key: 'overdueAR',
       label: 'Overdue A/R',
       value: money(kpis.arOverdue),
       icon: FileWarning,
@@ -84,6 +97,7 @@ export default function KpiRow({ kpis }: Props) {
       sub: `of ${money(kpis.arTotal)} total`,
     },
     {
+      key: 'openTickets',
       label: 'Open Tickets',
       value: kpis.openTickets.toLocaleString(),
       icon: Ticket,
@@ -92,6 +106,7 @@ export default function KpiRow({ kpis }: Props) {
       sub: `${kpis.openLeads} open leads`,
     },
     {
+      key: 'unackedAlarms',
       label: 'Unacked Alarms',
       value: kpis.unackedAlarms.toLocaleString(),
       icon: AlertTriangle,
@@ -99,15 +114,53 @@ export default function KpiRow({ kpis }: Props) {
       iconBg: 'bg-red-50',
       sub: kpis.unackedAlarms > 0 ? 'Needs attention' : 'All clear',
     },
+    {
+      key: 'scheduledToday',
+      label: 'Scheduled Today',
+      value: kpis.jobsToday.toLocaleString(),
+      icon: Clock,
+      iconColor: 'text-sky-600',
+      iconBg: 'bg-sky-50',
+      sub: 'jobs on today\'s board',
+    },
+    {
+      key: 'completedToday',
+      label: 'Completed Today',
+      value: kpis.jobsCompletedToday.toLocaleString(),
+      icon: CheckCircle2,
+      iconColor: 'text-emerald-600',
+      iconBg: 'bg-emerald-50',
+      sub: `of ${kpis.jobsToday} scheduled`,
+    },
+    {
+      key: 'techsOnClock',
+      label: 'Techs On Clock',
+      value: kpis.techsOnClock.toLocaleString(),
+      icon: Users,
+      iconColor: 'text-teal-600',
+      iconBg: 'bg-teal-50',
+      sub: 'currently working',
+    },
   ];
 
+  const items = allItems.filter(k => visibleKeys.includes(k.key));
+
+  const gridCols =
+    items.length <= 3
+      ? 'grid-cols-1 sm:grid-cols-3'
+      : items.length <= 4
+      ? 'grid-cols-2 md:grid-cols-4'
+      : items.length <= 6
+      ? 'grid-cols-2 md:grid-cols-3 xl:grid-cols-6'
+      : 'grid-cols-2 md:grid-cols-4 xl:grid-cols-8';
+
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
-      {items.map((k, i) => {
+    <div className={`grid ${gridCols} gap-3`}>
+      {items.map((k) => {
         const Icon = k.icon;
         return (
           <div
-            key={i}
+            key={k.key}
             className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all"
           >
             <div className="flex items-center justify-between mb-3">
