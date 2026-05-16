@@ -14,7 +14,7 @@ import QuickActions from './QuickActions';
 import DispatchTimeline from './DispatchTimeline';
 
 interface Props {
-  onNavigate?: (page: string) => void;
+  onNavigate?: (page: string, filter?: string) => void;
 }
 
 export default function Dashboard({ onNavigate }: Props) {
@@ -37,8 +37,8 @@ export default function Dashboard({ onNavigate }: Props) {
     year: 'numeric',
   });
 
-  const navigate = (page: string) => {
-    if (onNavigate) onNavigate(page);
+  const navigate = (page: string, filter?: string) => {
+    if (onNavigate) onNavigate(page, filter);
   };
 
   return (
@@ -73,7 +73,7 @@ export default function Dashboard({ onNavigate }: Props) {
         </div>
       ) : data ? (
         <>
-          {has('kpis') && <KpiRow kpis={data.kpis} />}
+          {has('kpis') && <KpiRow kpis={data.kpis} onNavigate={(nav) => navigate(nav.page, nav.filter)} />}
 
           {has('dispatch_timeline') && <DispatchTimeline />}
 

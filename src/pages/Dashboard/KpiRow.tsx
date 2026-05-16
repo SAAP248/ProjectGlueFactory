@@ -4,8 +4,14 @@ import { useRole } from '../../contexts/RoleContext';
 import { ROLE_KPIS, type KpiKey } from '../../config/roleDashboard';
 import type { DashboardKpis } from './useDashboardData';
 
+export interface KpiNavigation {
+  page: string;
+  filter?: string;
+}
+
 interface Props {
   kpis: DashboardKpis;
+  onNavigate?: (nav: KpiNavigation) => void;
 }
 
 interface Kpi {
@@ -17,6 +23,7 @@ interface Kpi {
   iconBg: string;
   delta?: { value: string; positive: boolean };
   sub?: string;
+  nav?: KpiNavigation;
 }
 
 const money = (n: number) =>
@@ -27,7 +34,7 @@ const money = (n: number) =>
 const fullMoney = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
-export default function KpiRow({ kpis }: Props) {
+export default function KpiRow({ kpis, onNavigate }: Props) {
   const { role } = useRole();
   const visibleKeys = ROLE_KPIS[role];
 
@@ -46,6 +53,7 @@ export default function KpiRow({ kpis }: Props) {
       icon: Users,
       iconColor: 'text-blue-600',
       iconBg: 'bg-blue-50',
+      nav: { page: 'customers' },
     },
     {
       key: 'mtdRevenue',
@@ -59,6 +67,7 @@ export default function KpiRow({ kpis }: Props) {
           ? { value: `${revenueDelta >= 0 ? '+' : ''}${revenueDelta.toFixed(1)}%`, positive: revenueDelta >= 0 }
           : undefined,
       sub: 'vs last month',
+      nav: { page: 'invoices' },
     },
     {
       key: 'mrr',
@@ -68,6 +77,7 @@ export default function KpiRow({ kpis }: Props) {
       iconColor: 'text-teal-600',
       iconBg: 'bg-teal-50',
       sub: 'RMR contracts',
+      nav: { page: 'invoices' },
     },
     {
       key: 'pipelineValue',
@@ -77,6 +87,7 @@ export default function KpiRow({ kpis }: Props) {
       iconColor: 'text-amber-600',
       iconBg: 'bg-amber-50',
       sub: `${kpis.activeDeals} active deals`,
+      nav: { page: 'deals' },
     },
     {
       key: 'openWorkOrders',
@@ -86,6 +97,7 @@ export default function KpiRow({ kpis }: Props) {
       iconColor: 'text-sky-600',
       iconBg: 'bg-sky-50',
       sub: `${kpis.jobsToday} scheduled today`,
+      nav: { page: 'work-orders', filter: 'open' },
     },
     {
       key: 'overdueAR',
@@ -95,6 +107,7 @@ export default function KpiRow({ kpis }: Props) {
       iconColor: 'text-rose-600',
       iconBg: 'bg-rose-50',
       sub: `of ${money(kpis.arTotal)} total`,
+      nav: { page: 'invoices' },
     },
     {
       key: 'openTickets',
@@ -104,15 +117,17 @@ export default function KpiRow({ kpis }: Props) {
       iconColor: 'text-orange-600',
       iconBg: 'bg-orange-50',
       sub: `${kpis.openLeads} open leads`,
+      nav: { page: 'tickets' },
     },
     {
       key: 'unackedAlarms',
-      label: 'Unacked Alarms',
+      label: "Today's Alarms",
       value: kpis.unackedAlarms.toLocaleString(),
       icon: AlertTriangle,
       iconColor: 'text-red-600',
       iconBg: 'bg-red-50',
       sub: kpis.unackedAlarms > 0 ? 'Needs attention' : 'All clear',
+      nav: { page: 'alarm-dashboard' },
     },
     {
       key: 'scheduledToday',
@@ -122,6 +137,7 @@ export default function KpiRow({ kpis }: Props) {
       iconColor: 'text-sky-600',
       iconBg: 'bg-sky-50',
       sub: 'jobs on today\'s board',
+      nav: { page: 'work-orders', filter: 'scheduled_today' },
     },
     {
       key: 'completedToday',
@@ -131,6 +147,7 @@ export default function KpiRow({ kpis }: Props) {
       iconColor: 'text-emerald-600',
       iconBg: 'bg-emerald-50',
       sub: `of ${kpis.jobsToday} scheduled`,
+      nav: { page: 'work-orders', filter: 'completed_today' },
     },
     {
       key: 'techsOnClock',
@@ -140,6 +157,7 @@ export default function KpiRow({ kpis }: Props) {
       iconColor: 'text-teal-600',
       iconBg: 'bg-teal-50',
       sub: 'currently working',
+      nav: { page: 'work-orders', filter: 'in_progress' },
     },
   ];
 
@@ -158,10 +176,14 @@ export default function KpiRow({ kpis }: Props) {
     <div className={`grid ${gridCols} gap-3`}>
       {items.map((k) => {
         const Icon = k.icon;
+        const clickable = !!k.nav && !!onNavigate;
         return (
           <div
             key={k.key}
-            className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all"
+            onClick={() => clickable && onNavigate!(k.nav!)}
+            className={`bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all ${
+              clickable ? 'cursor-pointer' : ''
+            }`}
           >
             <div className="flex items-center justify-between mb-3">
               <div className={`${k.iconBg} p-2 rounded-lg`}>

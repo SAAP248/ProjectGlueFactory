@@ -10,6 +10,7 @@ import WorkOrderModal from './WorkOrderModal';
 
 interface Props {
   onViewDetail: (id: string) => void;
+  initialFilter?: string;
 }
 
 const STATUS_OPTIONS = ['all', 'unassigned', 'scheduled', 'in_progress', 'on_hold', 'go_back', 'completed', 'cancelled'];
@@ -78,22 +79,33 @@ interface WOWithCompany extends WorkOrder {
   companies?: { name: string; is_trouble_customer?: boolean };
 }
 
-export default function WorkOrdersList({ onViewDetail }: Props) {
+export default function WorkOrdersList({ onViewDetail, initialFilter }: Props) {
   const [workOrders, setWorkOrders] = useState<WOWithCompany[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState(() => {
+    if (initialFilter === 'in_progress') return 'in_progress';
+    if (initialFilter === 'scheduled') return 'scheduled';
+    return 'all';
+  });
   const [typeFilter, setTypeFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [goBackOnly, setGoBackOnly] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [showModal, setShowModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [dateFilter, setDateFilter] = useState<string | null>(() => {
+    if (initialFilter === 'scheduled_today' || initialFilter === 'completed_today' || initialFilter === 'open') {
+      return 'today';
+    }
+    return null;
+  });
 
   const [stats, setStats] = useState({ open: 0, inProgress: 0, completedToday: 0, overdue: 0, goBackRate: 0 });
 
   const loadWorkOrders = useCallback(async () => {
     setLoading(true);
+    const today = new Date().toISOString().split('T')[0];
     let query = supabase
       .from('work_orders')
       .select(`
@@ -111,12 +123,12 @@ export default function WorkOrdersList({ onViewDetail }: Props) {
     if (typeFilter !== 'all') query = query.eq('work_order_type', typeFilter);
     if (sourceFilter !== 'all') query = query.eq('source', sourceFilter);
     if (goBackOnly) query = query.eq('is_go_back', true);
+    if (dateFilter === 'today') query = query.eq('scheduled_date', today);
 
     const { data } = await query;
     const results = (data as WOWithCompany[]) || [];
     setWorkOrders(results);
 
-    const today = new Date().toISOString().split('T')[0];
     const completed = results.filter(w => w.status === 'completed');
     const goBackCompleted = completed.filter(w => w.is_go_back).length;
     const goBackRate = completed.length > 0 ? Math.round((goBackCompleted / completed.length) * 100) : 0;
@@ -132,13 +144,16 @@ export default function WorkOrdersList({ onViewDetail }: Props) {
     });
 
     setLoading(false);
-  }, [statusFilter, typeFilter, sourceFilter, goBackOnly]);
+  }, [statusFilter, typeFilter, sourceFilter, goBackOnly, dateFilter]);
 
   useEffect(() => {
     loadWorkOrders();
   }, [loadWorkOrders]);
 
   const filtered = workOrders.filter(wo => {
+    const today = new Date().toISOString().split('T')[0];
+    if (initialFilter === 'open' && !['unassigned', 'scheduled'].includes(wo.status)) return false;
+    if (initialFilter === 'completed_today' && !(wo.status === 'completed' && wo.completed_at?.startsWith(today))) return false;
     if (!search) return true;
     const s = search.toLowerCase();
     return (
@@ -323,6 +338,15 @@ export default function WorkOrdersList({ onViewDetail }: Props) {
           </div>
         )}
       </div>
+
+      {/* Active dashboard filter banner */}
+      {initialFilter && (
+        <div className="bg-blue-50 border-b border-blue-100 px-6 py-2 flex items-center justify-between">
+          <span className="text-xs font-medium text-blue-700">
+            Filtered: {initialFilter === 'open' ? 'Open Work Orders' : initialFilter === 'scheduled_today' ? 'Scheduled Today' : initialFilter === 'completed_today' ? 'Completed Today' : initialFilter === 'in_progress' ? 'In Progress' : initialFilter}
+          </span>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">

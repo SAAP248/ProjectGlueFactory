@@ -5,7 +5,11 @@ import WorkOrderModal from './WorkOrderModal';
 
 type View = { type: 'list' } | { type: 'detail'; id: string };
 
-export default function WorkOrders() {
+interface Props {
+  initialFilter?: string;
+}
+
+export default function WorkOrders({ initialFilter }: Props) {
   const [view, setView] = useState<View>({ type: 'list' });
   const [editId, setEditId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -32,6 +36,7 @@ export default function WorkOrders() {
         <WorkOrdersList
           key={refreshKey}
           onViewDetail={handleViewDetail}
+          initialFilter={initialFilter}
         />
       )}
 

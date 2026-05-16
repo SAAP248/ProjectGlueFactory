@@ -41,6 +41,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState(() => ROLE_META[role].defaultPage);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [pageFilter, setPageFilter] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (!canAccessPage(role, currentPage)) {
@@ -52,6 +53,11 @@ function App() {
     // Will be handled by the useEffect above
   }, []);
 
+  const navigateTo = useCallback((page: string, filter?: string) => {
+    setPageFilter(filter);
+    setCurrentPage(page);
+  }, []);
+
   const navigateToCustomer = (customerId: string) => {
     setSelectedCustomerId(customerId);
     setCurrentPage('customer-profile');
@@ -60,7 +66,7 @@ function App() {
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard onNavigate={setCurrentPage} />;
+        return <Dashboard onNavigate={navigateTo} />;
       case 'alarm-dashboard':
         return <AlarmDashboard />;
       case 'dispatch':
@@ -88,7 +94,7 @@ function App() {
       case 'projects':
         return <ProjectManagement />;
       case 'work-orders':
-        return <WorkOrders />;
+        return <WorkOrders initialFilter={pageFilter} />;
       case 'tickets':
         return <Tickets />;
       case 'tasks':
@@ -136,7 +142,7 @@ function App() {
     <div className="flex h-screen bg-gray-50">
       <Sidebar
         currentPage={currentPage}
-        setCurrentPage={setCurrentPage}
+        setCurrentPage={(page: string) => { setPageFilter(undefined); setCurrentPage(page); }}
         collapsed={sidebarCollapsed}
         setCollapsed={setSidebarCollapsed}
       />
