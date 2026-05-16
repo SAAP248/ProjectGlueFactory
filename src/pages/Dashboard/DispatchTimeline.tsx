@@ -5,7 +5,6 @@ import { supabase } from '../../lib/supabase';
 interface TechAssignment {
   id: string;
   employee_id: string;
-  tech_name: string;
   wo_number: string;
   title: string;
   company_name: string;
@@ -16,7 +15,7 @@ interface TechAssignment {
   estimated_duration_minutes: number;
 }
 
-interface TechColumn {
+interface TechRow {
   id: string;
   name: string;
   initials: string;
@@ -24,16 +23,18 @@ interface TechColumn {
 
 const HOUR_START = 6;
 const HOUR_END = 19;
-const HOURS = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i);
-const HOUR_HEIGHT_PX = 72;
+const HOURS = Array.from({ length: HOUR_END - HOUR_START + 1 }, (_, i) => HOUR_START + i);
+const HOUR_WIDTH_PX = 100;
+const ROW_HEIGHT_PX = 64;
+const TOTAL_WIDTH = (HOUR_END - HOUR_START) * HOUR_WIDTH_PX;
 
 const STATUS_STYLES: Record<string, { bg: string; border: string; text: string; icon: typeof MapPin }> = {
-  assigned: { bg: 'bg-gray-50', border: 'border-gray-300', text: 'text-gray-700', icon: Calendar },
-  enroute: { bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-700', icon: Truck },
-  onsite: { bg: 'bg-teal-50', border: 'border-teal-300', text: 'text-teal-700', icon: MapPin },
-  working: { bg: 'bg-emerald-50', border: 'border-emerald-400', text: 'text-emerald-700', icon: Wrench },
-  on_break: { bg: 'bg-amber-50', border: 'border-amber-300', text: 'text-amber-700', icon: Coffee },
-  completed: { bg: 'bg-green-50', border: 'border-green-300', text: 'text-green-700', icon: CheckCircle2 },
+  assigned: { bg: 'bg-slate-100', border: 'border-slate-300', text: 'text-slate-700', icon: Calendar },
+  enroute: { bg: 'bg-blue-100', border: 'border-blue-400', text: 'text-blue-700', icon: Truck },
+  onsite: { bg: 'bg-teal-100', border: 'border-teal-400', text: 'text-teal-700', icon: MapPin },
+  working: { bg: 'bg-emerald-100', border: 'border-emerald-400', text: 'text-emerald-700', icon: Wrench },
+  on_break: { bg: 'bg-amber-100', border: 'border-amber-400', text: 'text-amber-700', icon: Coffee },
+  completed: { bg: 'bg-green-100', border: 'border-green-400', text: 'text-green-700', icon: CheckCircle2 },
 };
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -69,7 +70,7 @@ function todayISO(): string {
 export default function DispatchTimeline() {
   const [selectedDate, setSelectedDate] = useState(todayISO);
   const [assignments, setAssignments] = useState<TechAssignment[]>([]);
-  const [techs, setTechs] = useState<TechColumn[]>([]);
+  const [techs, setTechs] = useState<TechRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -88,7 +89,7 @@ export default function DispatchTimeline() {
 
       if (cancelled) return;
 
-      const techList: TechColumn[] = (techRes.data || []).map((e: any) => ({
+      const techList: TechRow[] = (techRes.data || []).map((e: any) => ({
         id: e.id,
         name: `${e.first_name} ${e.last_name}`.trim(),
         initials: `${(e.first_name || '')[0] || ''}${(e.last_name || '')[0] || ''}`.toUpperCase(),
@@ -97,7 +98,6 @@ export default function DispatchTimeline() {
       const items: TechAssignment[] = (assignRes.data || []).map((a: any) => ({
         id: a.id,
         employee_id: a.employee_id,
-        tech_name: '',
         wo_number: a.work_orders?.wo_number || '',
         title: a.work_orders?.title || '',
         company_name: a.work_orders?.companies?.name || '',
@@ -133,7 +133,6 @@ export default function DispatchTimeline() {
   }, []);
 
   const isToday = selectedDate === todayISO();
-  const totalHeight = HOURS.length * HOUR_HEIGHT_PX;
 
   const shiftDate = (delta: number) => {
     const d = new Date(selectedDate + 'T12:00:00');
@@ -148,7 +147,7 @@ export default function DispatchTimeline() {
         <div className="flex items-center gap-3">
           <Calendar className="h-4 w-4 text-gray-500" />
           <h3 className="text-sm font-semibold text-gray-900">Tech Schedule</h3>
-          <span className="text-xs text-gray-500">{assignments.length} jobs</span>
+          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{assignments.length} jobs</span>
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -165,7 +164,7 @@ export default function DispatchTimeline() {
           >
             Today
           </button>
-          <span className="text-sm font-medium text-gray-700 min-w-[100px] text-center">
+          <span className="text-sm font-medium text-gray-700 min-w-[110px] text-center">
             {formatDateLabel(selectedDate)}
           </span>
           <button
@@ -186,109 +185,99 @@ export default function DispatchTimeline() {
         <div className="py-16 text-center text-sm text-gray-500">No active technicians found.</div>
       ) : (
         <div className="overflow-x-auto">
-          <div className="min-w-[600px]">
-            {/* Tech columns header */}
-            <div className="flex border-b border-gray-100 sticky top-0 bg-white z-10">
-              <div className="w-16 flex-shrink-0" />
-              {techs.map(t => (
-                <div key={t.id} className="flex-1 min-w-[160px] px-2 py-2.5 text-center border-l border-gray-100">
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-slate-600 flex items-center justify-center">
-                      <span className="text-[10px] font-bold text-white">{t.initials}</span>
-                    </div>
-                    <span className="text-xs font-semibold text-gray-800 truncate">{t.name}</span>
-                  </div>
-                  <span className="text-[10px] text-gray-400 mt-0.5 block">
-                    {(assignmentsByTech.get(t.id) || []).length} jobs
-                  </span>
-                </div>
-              ))}
+          {/* Hour headers */}
+          <div className="flex sticky top-0 bg-white z-10 border-b border-gray-100">
+            <div className="w-40 flex-shrink-0 px-3 py-2 border-r border-gray-100">
+              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Technician</span>
             </div>
+            <div className="relative" style={{ width: TOTAL_WIDTH }}>
+              <div className="flex">
+                {HOURS.slice(0, -1).map((h) => (
+                  <div
+                    key={h}
+                    className="text-[10px] text-gray-400 font-medium border-l border-gray-100 px-1.5 py-2"
+                    style={{ width: HOUR_WIDTH_PX }}
+                  >
+                    {h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
 
-            {/* Timeline body */}
-            <div className="relative overflow-y-auto max-h-[420px]" style={{ height: Math.min(totalHeight, 420) }}>
-              <div className="flex relative" style={{ height: totalHeight }}>
-                {/* Hour labels */}
-                <div className="w-16 flex-shrink-0 relative">
-                  {HOURS.map((h) => (
-                    <div
-                      key={h}
-                      className="absolute left-0 right-0 flex items-start justify-end pr-2 text-[10px] text-gray-400 font-medium"
-                      style={{ top: (h - HOUR_START) * HOUR_HEIGHT_PX }}
-                    >
-                      {h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`}
-                    </div>
-                  ))}
+          {/* Tech rows */}
+          {techs.map((tech, idx) => {
+            const techJobs = assignmentsByTech.get(tech.id) || [];
+            return (
+              <div
+                key={tech.id}
+                className={`flex ${idx < techs.length - 1 ? 'border-b border-gray-100' : ''}`}
+                style={{ minHeight: ROW_HEIGHT_PX }}
+              >
+                {/* Tech name cell */}
+                <div className="w-40 flex-shrink-0 px-3 py-2 border-r border-gray-100 flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center flex-shrink-0">
+                    <span className="text-[10px] font-bold text-white">{tech.initials}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-gray-800 truncate">{tech.name}</p>
+                    <p className="text-[10px] text-gray-400">{techJobs.length} job{techJobs.length !== 1 ? 's' : ''}</p>
+                  </div>
                 </div>
 
-                {/* Grid lines + tech columns */}
-                <div className="flex-1 relative">
-                  {/* Horizontal hour lines */}
-                  {HOURS.map((h) => (
+                {/* Timeline lane */}
+                <div className="relative flex-1" style={{ width: TOTAL_WIDTH, minHeight: ROW_HEIGHT_PX }}>
+                  {/* Hour grid lines */}
+                  {HOURS.slice(0, -1).map((h) => (
                     <div
                       key={h}
-                      className="absolute left-0 right-0 border-t border-gray-100"
-                      style={{ top: (h - HOUR_START) * HOUR_HEIGHT_PX }}
+                      className="absolute top-0 bottom-0 border-l border-gray-50"
+                      style={{ left: (h - HOUR_START) * HOUR_WIDTH_PX }}
                     />
                   ))}
 
                   {/* Current time indicator */}
                   {isToday && nowMinutes >= HOUR_START * 60 && nowMinutes <= HOUR_END * 60 && (
                     <div
-                      className="absolute left-0 right-0 z-20 pointer-events-none"
-                      style={{ top: ((nowMinutes - HOUR_START * 60) / 60) * HOUR_HEIGHT_PX }}
+                      className="absolute top-0 bottom-0 z-10 pointer-events-none"
+                      style={{ left: ((nowMinutes - HOUR_START * 60) / 60) * HOUR_WIDTH_PX }}
                     >
-                      <div className="flex items-center">
-                        <div className="w-2 h-2 rounded-full bg-red-500 -ml-1" />
-                        <div className="flex-1 h-[2px] bg-red-500 opacity-70" />
-                      </div>
+                      <div className="w-[2px] h-full bg-red-500 opacity-60" />
+                      <div className="absolute -top-0.5 -left-1 w-2 h-2 rounded-full bg-red-500" />
                     </div>
                   )}
 
-                  {/* Tech columns with jobs */}
-                  <div className="flex h-full relative">
-                    {techs.map((tech) => {
-                      const techJobs = assignmentsByTech.get(tech.id) || [];
-                      return (
-                        <div key={tech.id} className="flex-1 min-w-[160px] relative border-l border-gray-100">
-                          {techJobs.map((job) => {
-                            const startMin = timeToMinutes(job.scheduled_start_time);
-                            const duration = job.estimated_duration_minutes || 60;
-                            const topPx = ((startMin - HOUR_START * 60) / 60) * HOUR_HEIGHT_PX;
-                            const heightPx = Math.max((duration / 60) * HOUR_HEIGHT_PX - 4, 28);
-                            const style = STATUS_STYLES[job.status] || STATUS_STYLES.assigned;
-                            const StatusIcon = style.icon;
-                            const dotColor = PRIORITY_DOT[job.priority] || PRIORITY_DOT.normal;
+                  {/* Job blocks */}
+                  {techJobs.map((job) => {
+                    const startMin = timeToMinutes(job.scheduled_start_time);
+                    const duration = job.estimated_duration_minutes || 60;
+                    const leftPx = ((startMin - HOUR_START * 60) / 60) * HOUR_WIDTH_PX;
+                    const widthPx = Math.max((duration / 60) * HOUR_WIDTH_PX - 4, 60);
+                    const style = STATUS_STYLES[job.status] || STATUS_STYLES.assigned;
+                    const StatusIcon = style.icon;
+                    const dotColor = PRIORITY_DOT[job.priority] || PRIORITY_DOT.normal;
 
-                            return (
-                              <div
-                                key={job.id}
-                                className={`absolute left-1 right-1 rounded-lg border ${style.bg} ${style.border} px-2 py-1.5 overflow-hidden cursor-default hover:shadow-md transition-shadow group`}
-                                style={{ top: topPx, height: heightPx }}
-                                title={`${job.wo_number} - ${job.title}\n${job.company_name}\n${formatTime12(job.scheduled_start_time)} (${duration}min)`}
-                              >
-                                <div className="flex items-center gap-1.5 mb-0.5">
-                                  <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotColor}`} />
-                                  <span className={`text-[10px] font-bold ${style.text} truncate`}>{job.wo_number}</span>
-                                  <StatusIcon className={`h-3 w-3 flex-shrink-0 ${style.text} ml-auto opacity-70`} />
-                                </div>
-                                {heightPx > 40 && (
-                                  <p className="text-[10px] text-gray-700 truncate leading-tight">{job.title}</p>
-                                )}
-                                {heightPx > 56 && (
-                                  <p className="text-[10px] text-gray-500 truncate leading-tight">{job.company_name}</p>
-                                )}
-                              </div>
-                            );
-                          })}
+                    return (
+                      <div
+                        key={job.id}
+                        className={`absolute top-2 rounded-lg border ${style.bg} ${style.border} px-2 py-1 overflow-hidden cursor-default hover:shadow-md hover:z-20 transition-shadow`}
+                        style={{ left: leftPx, width: widthPx, height: ROW_HEIGHT_PX - 16 }}
+                        title={`${job.wo_number} - ${job.title}\n${job.company_name}\n${formatTime12(job.scheduled_start_time)} (${duration}min)\nStatus: ${job.status}`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotColor}`} />
+                          <span className={`text-[10px] font-bold ${style.text} truncate`}>{job.wo_number}</span>
+                          <StatusIcon className={`h-3 w-3 flex-shrink-0 ${style.text} ml-auto opacity-70`} />
                         </div>
-                      );
-                    })}
-                  </div>
+                        <p className="text-[10px] text-gray-700 truncate leading-tight mt-0.5">{job.title}</p>
+                        <p className="text-[10px] text-gray-500 truncate leading-tight">{job.company_name}</p>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
       )}
 
