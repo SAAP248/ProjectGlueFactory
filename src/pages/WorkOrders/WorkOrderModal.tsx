@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, ChevronDown, Search, RotateCcw, AlertTriangle, Phone, MessageSquare, Building2, Radio } from 'lucide-react';
+import { X, ChevronDown, Search, RotateCcw, AlertTriangle, Phone, MessageSquare, Building2, Radio, UserPlus, Star } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface Employee {
@@ -30,6 +30,16 @@ interface CustomerSystem {
   system_types?: { name: string };
 }
 
+interface Contact {
+  id: string;
+  first_name: string;
+  last_name: string;
+  title: string | null;
+  phone: string | null;
+  email: string | null;
+  is_primary: boolean;
+}
+
 interface GoBackReason {
   id: string;
   label: string;
@@ -47,6 +57,8 @@ interface WorkOrderFormData {
   company_id: string;
   site_id: string;
   system_id: string;
+  requested_by_contact_id: string;
+  requested_by_name: string;
   title: string;
   work_order_type: string;
   priority: string;
@@ -125,16 +137,26 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
   const [companies, setCompanies] = useState<Company[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [systems, setSystems] = useState<CustomerSystem[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [goBackReasons, setGoBackReasons] = useState<GoBackReason[]>([]);
   const [pastWOs, setPastWOs] = useState<PastWO[]>([]);
   const [techSearch, setTechSearch] = useState('');
   const [woSearch, setWoSearch] = useState('');
+
+  const [showNewCaller, setShowNewCaller] = useState(false);
+  const [newCallerFirst, setNewCallerFirst] = useState('');
+  const [newCallerLast, setNewCallerLast] = useState('');
+  const [newCallerPhone, setNewCallerPhone] = useState('');
+  const [newCallerEmail, setNewCallerEmail] = useState('');
+  const [addAsContact, setAddAsContact] = useState(true);
 
   const [form, setForm] = useState<WorkOrderFormData>({
     source: 'office',
     company_id: prefilledCompanyId || '',
     site_id: '',
     system_id: '',
+    requested_by_contact_id: '',
+    requested_by_name: '',
     title: '',
     work_order_type: 'service',
     priority: 'normal',
@@ -166,10 +188,12 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
   useEffect(() => {
     if (form.company_id) {
       loadSites(form.company_id);
+      loadContacts(form.company_id);
       loadPastWOs(form.company_id);
     } else {
       setSites([]);
       setSystems([]);
+      setContacts([]);
       setPastWOs([]);
     }
   }, [form.company_id]);
@@ -200,6 +224,16 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
     setSystems(data || []);
   }
 
+  async function loadContacts(companyId: string) {
+    const { data } = await supabase
+      .from('contacts')
+      .select('id, first_name, last_name, title, phone, email, is_primary')
+      .eq('company_id', companyId)
+      .order('is_primary', { ascending: false })
+      .order('first_name');
+    setContacts(data || []);
+  }
+
   async function loadPastWOs(companyId: string) {
     const { data } = await supabase
       .from('work_orders').select('id, wo_number, title, scheduled_date')
@@ -218,6 +252,8 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
         company_id: data.company_id || '',
         site_id: data.site_id || '',
         system_id: data.system_id || '',
+        requested_by_contact_id: data.requested_by_contact_id || '',
+        requested_by_name: data.requested_by_name || '',
         title: data.title || '',
         work_order_type: data.work_order_type || 'service',
         priority: data.priority || 'normal',
@@ -238,6 +274,12 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
         go_back_reason_ids: data.go_back_reason_ids || [],
         go_back_notes: data.go_back_notes || '',
       });
+      if (data.requested_by_name && !data.requested_by_contact_id) {
+        setShowNewCaller(true);
+        const parts = (data.requested_by_name || '').split(' ');
+        setNewCallerFirst(parts[0] || '');
+        setNewCallerLast(parts.slice(1).join(' ') || '');
+      }
     }
   }
 
@@ -261,19 +303,64 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
     });
   }
 
+  function handleRequestedByChange(value: string) {
+    if (value === '__new_caller__') {
+      setShowNewCaller(true);
+      setField('requested_by_contact_id', '');
+      setField('requested_by_name', '');
+    } else {
+      setShowNewCaller(false);
+      setNewCallerFirst('');
+      setNewCallerLast('');
+      setNewCallerPhone('');
+      setNewCallerEmail('');
+      setField('requested_by_contact_id', value);
+      setField('requested_by_name', '');
+    }
+  }
+
   async function handleSave(asDraft = false) {
-    if (!form.title.trim()) { setError('Title is required'); setActiveSection(1); return; }
-    if (!form.company_id) { setError('Customer is required'); setActiveSection(2); return; }
+    if (!form.company_id) { setError('Customer is required'); setActiveSection(1); return; }
+    if (!form.title.trim()) { setError('Title is required'); setActiveSection(2); return; }
 
     if (asDraft) setSavingDraft(true); else setSaving(true);
     setError(null);
 
     try {
+      let contactId = form.requested_by_contact_id || null;
+      let contactName = form.requested_by_name || null;
+
+      if (showNewCaller && newCallerFirst.trim()) {
+        const fullName = `${newCallerFirst.trim()} ${newCallerLast.trim()}`.trim();
+        if (addAsContact && form.company_id) {
+          const { data: newContact, error: contactErr } = await supabase
+            .from('contacts')
+            .insert({
+              company_id: form.company_id,
+              first_name: newCallerFirst.trim(),
+              last_name: newCallerLast.trim(),
+              phone: newCallerPhone.trim() || null,
+              email: newCallerEmail.trim() || null,
+              is_primary: false,
+            })
+            .select('id')
+            .single();
+          if (contactErr) throw contactErr;
+          contactId = newContact.id;
+          contactName = null;
+        } else {
+          contactId = null;
+          contactName = fullName;
+        }
+      }
+
       const payload: Record<string, any> = {
         source: form.source,
         company_id: form.company_id,
         site_id: form.site_id || null,
         system_id: form.system_id || null,
+        requested_by_contact_id: contactId,
+        requested_by_name: contactName,
         title: form.title.trim(),
         work_order_type: form.work_order_type,
         priority: form.priority,
@@ -346,7 +433,7 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
     }
   }
 
-  const sections = ['Source', 'Job Info', 'Customer & Site', 'Schedule', 'Billing', 'Dispatch'];
+  const sections = ['Source', 'Customer & Site', 'Job Info', 'Schedule', 'Billing', 'Dispatch'];
 
   const filteredEmployees = employees.filter(emp => {
     if (!techSearch) return true;
@@ -391,6 +478,7 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
         <div className="flex-1 overflow-y-auto p-6">
           {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{error}</div>}
 
+          {/* Section 0: Source */}
           {activeSection === 0 && (
             <div className="space-y-5">
               <div>
@@ -514,7 +602,174 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
             </div>
           )}
 
+          {/* Section 1: Customer & Site (moved before Job Info) */}
           {activeSection === 1 && (
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Customer <span className="text-red-500">*</span></label>
+                <div className="relative">
+                  <select
+                    value={form.company_id}
+                    onChange={e => { setField('company_id', e.target.value); setField('site_id', ''); setField('system_id', ''); setField('go_back_work_order_id', ''); setField('requested_by_contact_id', ''); setField('requested_by_name', ''); setShowNewCaller(false); }}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8"
+                  >
+                    <option value="">Select a customer...</option>
+                    {companies.map(c => <option key={c.id} value={c.id}>{c.name}{c.is_trouble_customer ? ' ⚠' : ''}</option>)}
+                  </select>
+                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {selectedCompany?.is_trouble_customer && (
+                <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold text-amber-800">Trouble Customer — Office Staff Only</p>
+                    {selectedCompany.trouble_notes && <p className="text-sm text-amber-700 mt-1">{selectedCompany.trouble_notes}</p>}
+                    <p className="text-xs text-amber-600 mt-2">This information is not visible in the Technician Portal.</p>
+                  </div>
+                </div>
+              )}
+
+              {form.company_id && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Site / Location</label>
+                  <div className="relative">
+                    <select value={form.site_id} onChange={e => { setField('site_id', e.target.value); setField('system_id', ''); }} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8">
+                      <option value="">Select a site...</option>
+                      {sites.map(s => <option key={s.id} value={s.id}>{s.name} — {s.address}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  </div>
+                  {sites.length === 0 && <p className="text-xs text-gray-400 mt-1">No sites found for this customer.</p>}
+                </div>
+              )}
+
+              {form.company_id && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Requested By</label>
+                  <div className="relative">
+                    <select
+                      value={showNewCaller ? '__new_caller__' : form.requested_by_contact_id}
+                      onChange={e => handleRequestedByChange(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8"
+                    >
+                      <option value="">Select who requested this...</option>
+                      {contacts.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.first_name} {c.last_name}{c.title ? ` — ${c.title}` : ''}{c.is_primary ? ' (Primary)' : ''}
+                        </option>
+                      ))}
+                      <option value="__new_caller__">+ New Caller</option>
+                    </select>
+                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  </div>
+
+                  {!showNewCaller && form.requested_by_contact_id && (() => {
+                    const c = contacts.find(ct => ct.id === form.requested_by_contact_id);
+                    if (!c) return null;
+                    return (
+                      <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg">
+                        <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                          {c.first_name[0]}{c.last_name[0]}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+                            {c.first_name} {c.last_name}
+                            {c.is_primary && <Star className="h-3 w-3 text-amber-500 fill-amber-500" />}
+                          </p>
+                          {c.title && <p className="text-xs text-gray-500">{c.title}</p>}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {showNewCaller && (
+                    <div className="mt-3 bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <UserPlus className="h-4 w-4 text-blue-600" />
+                        <p className="text-sm font-semibold text-gray-800">New Caller</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">First Name <span className="text-red-500">*</span></label>
+                          <input
+                            type="text"
+                            value={newCallerFirst}
+                            onChange={e => setNewCallerFirst(e.target.value)}
+                            placeholder="First name"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Last Name <span className="text-red-500">*</span></label>
+                          <input
+                            type="text"
+                            value={newCallerLast}
+                            onChange={e => setNewCallerLast(e.target.value)}
+                            placeholder="Last name"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Phone</label>
+                          <input
+                            type="tel"
+                            value={newCallerPhone}
+                            onChange={e => setNewCallerPhone(e.target.value)}
+                            placeholder="(555) 123-4567"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
+                          <input
+                            type="email"
+                            value={newCallerEmail}
+                            onChange={e => setNewCallerEmail(e.target.value)}
+                            placeholder="email@example.com"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer select-none pt-1">
+                        <div
+                          onClick={() => setAddAsContact(!addAsContact)}
+                          className={`w-9 h-5 rounded-full transition-colors flex items-center flex-shrink-0 ${addAsContact ? 'bg-blue-500' : 'bg-gray-200'}`}
+                        >
+                          <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform mx-0.5 ${addAsContact ? 'translate-x-4' : 'translate-x-0'}`} />
+                        </div>
+                        <span className="text-sm text-gray-700">Add this person as a contact on the account</span>
+                      </label>
+                    </div>
+                  )}
+
+                  {contacts.length === 0 && !showNewCaller && (
+                    <p className="text-xs text-gray-400 mt-1">No contacts found for this customer.</p>
+                  )}
+                </div>
+              )}
+
+              {form.site_id && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">System</label>
+                  <div className="relative">
+                    <select value={form.system_id} onChange={e => setField('system_id', e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8">
+                      <option value="">Select a system...</option>
+                      {systems.map(s => <option key={s.id} value={s.id}>{s.name}{(s.system_types as any)?.name ? ` (${(s.system_types as any).name})` : ''}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  </div>
+                  {systems.length === 0 && <p className="text-xs text-gray-400 mt-1">No systems found for this site.</p>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Section 2: Job Info (moved after Customer & Site) */}
+          {activeSection === 2 && (
             <div className="space-y-5">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Title <span className="text-red-500">*</span></label>
@@ -570,64 +825,7 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
             </div>
           )}
 
-          {activeSection === 2 && (
-            <div className="space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Customer <span className="text-red-500">*</span></label>
-                <div className="relative">
-                  <select
-                    value={form.company_id}
-                    onChange={e => { setField('company_id', e.target.value); setField('site_id', ''); setField('system_id', ''); setField('go_back_work_order_id', ''); }}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8"
-                  >
-                    <option value="">Select a customer...</option>
-                    {companies.map(c => <option key={c.id} value={c.id}>{c.name}{c.is_trouble_customer ? ' ⚠' : ''}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                </div>
-              </div>
-
-              {selectedCompany?.is_trouble_customer && (
-                <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-bold text-amber-800">Trouble Customer — Office Staff Only</p>
-                    {selectedCompany.trouble_notes && <p className="text-sm text-amber-700 mt-1">{selectedCompany.trouble_notes}</p>}
-                    <p className="text-xs text-amber-600 mt-2">This information is not visible in the Technician Portal.</p>
-                  </div>
-                </div>
-              )}
-
-              {form.company_id && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Site / Location</label>
-                  <div className="relative">
-                    <select value={form.site_id} onChange={e => { setField('site_id', e.target.value); setField('system_id', ''); }} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8">
-                      <option value="">Select a site...</option>
-                      {sites.map(s => <option key={s.id} value={s.id}>{s.name} — {s.address}</option>)}
-                    </select>
-                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                  </div>
-                  {sites.length === 0 && <p className="text-xs text-gray-400 mt-1">No sites found for this customer.</p>}
-                </div>
-              )}
-
-              {form.site_id && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">System</label>
-                  <div className="relative">
-                    <select value={form.system_id} onChange={e => setField('system_id', e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8">
-                      <option value="">Select a system...</option>
-                      {systems.map(s => <option key={s.id} value={s.id}>{s.name}{(s.system_types as any)?.name ? ` (${(s.system_types as any).name})` : ''}</option>)}
-                    </select>
-                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                  </div>
-                  {systems.length === 0 && <p className="text-xs text-gray-400 mt-1">No systems found for this site.</p>}
-                </div>
-              )}
-            </div>
-          )}
-
+          {/* Section 3: Schedule */}
           {activeSection === 3 && (
             <div className="space-y-5">
               <div className="grid grid-cols-2 gap-4">
@@ -659,6 +857,7 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
             </div>
           )}
 
+          {/* Section 4: Billing */}
           {activeSection === 4 && (
             <div className="space-y-5">
               <div>
@@ -699,6 +898,7 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
             </div>
           )}
 
+          {/* Section 5: Dispatch */}
           {activeSection === 5 && (
             <div className="space-y-5">
               <div>

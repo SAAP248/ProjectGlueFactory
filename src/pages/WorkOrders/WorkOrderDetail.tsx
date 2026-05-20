@@ -139,6 +139,7 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit }: Props) 
           companies(name, is_trouble_customer, trouble_notes),
           sites(name, address),
           employees(first_name, last_name),
+          requested_by_contact:contacts!requested_by_contact_id(first_name, last_name, title),
           work_order_technicians(
             id, employee_id, is_lead, enroute_at, onsite_at, completed_at, notes,
             status, paused_at, total_paused_minutes,
@@ -436,7 +437,7 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit }: Props) 
               )}
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mb-1">{wo.title}</h1>
-            <div className="flex items-center gap-4 text-sm text-gray-500">
+            <div className="flex items-center gap-4 text-sm text-gray-500 flex-wrap">
               {(wo as any).companies && (
                 <span className="flex items-center gap-1">
                   <User className="h-3.5 w-3.5" />
@@ -454,6 +455,12 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit }: Props) 
                   <Clock className="h-3.5 w-3.5" />
                   {new Date(wo.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   {wo.scheduled_time && ` at ${wo.scheduled_time}`}
+                </span>
+              )}
+              {((wo as any).requested_by_contact_id || (wo as any).requested_by_name) && (
+                <span className="flex items-center gap-1 text-blue-600">
+                  <Phone className="h-3.5 w-3.5" />
+                  Requested by: {(wo as any).requested_by_name || ((wo as any).requested_by_contact ? `${(wo as any).requested_by_contact.first_name} ${(wo as any).requested_by_contact.last_name}` : 'Contact')}
                 </span>
               )}
             </div>

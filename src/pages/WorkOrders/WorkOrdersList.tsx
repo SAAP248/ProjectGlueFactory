@@ -94,7 +94,7 @@ export default function WorkOrdersList({ onViewDetail, initialFilter }: Props) {
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [showModal, setShowModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [dateFilter, setDateFilter] = useState<string | null>(() => {
+  const [dateFilter] = useState<string | null>(() => {
     if (initialFilter === 'scheduled_today' || initialFilter === 'completed_today' || initialFilter === 'open') {
       return 'today';
     }
