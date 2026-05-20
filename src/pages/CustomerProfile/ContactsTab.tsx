@@ -24,6 +24,23 @@ function initials(first: string, last: string) {
   return `${first[0] || ''}${last[0] || ''}`.toUpperCase();
 }
 
+function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 10);
+  if (digits.length === 0) return '';
+  if (digits.length <= 3) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+function phoneDigits(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
+function isValidPhone(value: string): boolean {
+  if (!value.trim()) return true;
+  return phoneDigits(value).length === 10;
+}
+
 const emptyForm = {
   first_name: '',
   last_name: '',
@@ -52,8 +69,8 @@ function ContactModal({ companyId, initial, onClose, onSaved }: ContactModalProp
           last_name: initial.last_name,
           title: initial.title || '',
           email: initial.email || '',
-          phone: initial.phone || '',
-          mobile: initial.mobile || '',
+          phone: formatPhone(initial.phone || ''),
+          mobile: formatPhone(initial.mobile || ''),
           is_primary: initial.is_primary,
           notes: initial.notes || '',
         }
@@ -71,11 +88,24 @@ function ContactModal({ companyId, initial, onClose, onSaved }: ContactModalProp
       setError('First and last name are required.');
       return;
     }
+    if (!isValidPhone(form.phone)) {
+      setError('Phone must be exactly 10 digits.');
+      return;
+    }
+    if (!isValidPhone(form.mobile)) {
+      setError('Mobile must be exactly 10 digits.');
+      return;
+    }
     setSaving(true);
+    const payload = {
+      ...form,
+      phone: form.phone.trim() ? formatPhone(form.phone) : '',
+      mobile: form.mobile.trim() ? formatPhone(form.mobile) : '',
+    };
     if (initial) {
-      await supabase.from('contacts').update({ ...form }).eq('id', initial.id);
+      await supabase.from('contacts').update(payload).eq('id', initial.id);
     } else {
-      await supabase.from('contacts').insert({ ...form, company_id: companyId });
+      await supabase.from('contacts').insert({ ...payload, company_id: companyId });
     }
     setSaving(false);
     onSaved();
@@ -143,18 +173,26 @@ function ContactModal({ companyId, initial, onClose, onSaved }: ContactModalProp
               <input
                 type="tel"
                 value={form.phone}
-                onChange={e => field('phone', e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={e => field('phone', formatPhone(e.target.value))}
+                placeholder="(555) 123-4567"
+                className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${form.phone && !isValidPhone(form.phone) ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
               />
+              {form.phone && !isValidPhone(form.phone) && (
+                <p className="text-xs text-red-500 mt-1">Must be 10 digits</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Mobile</label>
               <input
                 type="tel"
                 value={form.mobile}
-                onChange={e => field('mobile', e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={e => field('mobile', formatPhone(e.target.value))}
+                placeholder="(555) 123-4567"
+                className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${form.mobile && !isValidPhone(form.mobile) ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
               />
+              {form.mobile && !isValidPhone(form.mobile) && (
+                <p className="text-xs text-red-500 mt-1">Must be 10 digits</p>
+              )}
             </div>
           </div>
 
