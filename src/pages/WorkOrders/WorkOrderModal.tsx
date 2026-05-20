@@ -143,11 +143,11 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
   const [techSearch, setTechSearch] = useState('');
   const [woSearch, setWoSearch] = useState('');
 
-  const [showNewCaller, setShowNewCaller] = useState(false);
-  const [newCallerFirst, setNewCallerFirst] = useState('');
-  const [newCallerLast, setNewCallerLast] = useState('');
-  const [newCallerPhone, setNewCallerPhone] = useState('');
-  const [newCallerEmail, setNewCallerEmail] = useState('');
+  const [showNewContact, setShowNewContact] = useState(false);
+  const [newContactFirst, setNewContactFirst] = useState('');
+  const [newContactLast, setNewContactLast] = useState('');
+  const [newContactPhone, setNewContactPhone] = useState('');
+  const [newContactEmail, setNewContactEmail] = useState('');
   const [addAsContact, setAddAsContact] = useState(true);
 
   const [form, setForm] = useState<WorkOrderFormData>({
@@ -275,10 +275,10 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
         go_back_notes: data.go_back_notes || '',
       });
       if (data.requested_by_name && !data.requested_by_contact_id) {
-        setShowNewCaller(true);
+        setShowNewContact(true);
         const parts = (data.requested_by_name || '').split(' ');
-        setNewCallerFirst(parts[0] || '');
-        setNewCallerLast(parts.slice(1).join(' ') || '');
+        setNewContactFirst(parts[0] || '');
+        setNewContactLast(parts.slice(1).join(' ') || '');
       }
     }
   }
@@ -303,17 +303,25 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
     });
   }
 
+  function formatPhoneNumber(value: string): string {
+    const digits = value.replace(/\D/g, '').slice(0, 10);
+    if (digits.length === 0) return '';
+    if (digits.length <= 3) return `(${digits}`;
+    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+
   function handleRequestedByChange(value: string) {
-    if (value === '__new_caller__') {
-      setShowNewCaller(true);
+    if (value === '__new_contact__') {
+      setShowNewContact(true);
       setField('requested_by_contact_id', '');
       setField('requested_by_name', '');
     } else {
-      setShowNewCaller(false);
-      setNewCallerFirst('');
-      setNewCallerLast('');
-      setNewCallerPhone('');
-      setNewCallerEmail('');
+      setShowNewContact(false);
+      setNewContactFirst('');
+      setNewContactLast('');
+      setNewContactPhone('');
+      setNewContactEmail('');
       setField('requested_by_contact_id', value);
       setField('requested_by_name', '');
     }
@@ -330,17 +338,18 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
       let contactId = form.requested_by_contact_id || null;
       let contactName = form.requested_by_name || null;
 
-      if (showNewCaller && newCallerFirst.trim()) {
-        const fullName = `${newCallerFirst.trim()} ${newCallerLast.trim()}`.trim();
+      if (showNewContact && newContactFirst.trim()) {
+        const fullName = `${newContactFirst.trim()} ${newContactLast.trim()}`.trim();
+        const rawPhone = newContactPhone.replace(/\D/g, '');
         if (addAsContact && form.company_id) {
           const { data: newContact, error: contactErr } = await supabase
             .from('contacts')
             .insert({
               company_id: form.company_id,
-              first_name: newCallerFirst.trim(),
-              last_name: newCallerLast.trim(),
-              phone: newCallerPhone.trim() || null,
-              email: newCallerEmail.trim() || null,
+              first_name: newContactFirst.trim(),
+              last_name: newContactLast.trim(),
+              phone: rawPhone || null,
+              email: newContactEmail.trim() || null,
               is_primary: false,
             })
             .select('id')
@@ -610,7 +619,7 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
                 <div className="relative">
                   <select
                     value={form.company_id}
-                    onChange={e => { setField('company_id', e.target.value); setField('site_id', ''); setField('system_id', ''); setField('go_back_work_order_id', ''); setField('requested_by_contact_id', ''); setField('requested_by_name', ''); setShowNewCaller(false); }}
+                    onChange={e => { setField('company_id', e.target.value); setField('site_id', ''); setField('system_id', ''); setField('go_back_work_order_id', ''); setField('requested_by_contact_id', ''); setField('requested_by_name', ''); setShowNewContact(false); }}
                     className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8"
                   >
                     <option value="">Select a customer...</option>
@@ -645,12 +654,26 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
                 </div>
               )}
 
+              {form.site_id && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">System</label>
+                  <div className="relative">
+                    <select value={form.system_id} onChange={e => setField('system_id', e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8">
+                      <option value="">Select a system...</option>
+                      {systems.map(s => <option key={s.id} value={s.id}>{s.name}{(s.system_types as any)?.name ? ` (${(s.system_types as any).name})` : ''}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  </div>
+                  {systems.length === 0 && <p className="text-xs text-gray-400 mt-1">No systems found for this site.</p>}
+                </div>
+              )}
+
               {form.company_id && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Requested By</label>
                   <div className="relative">
                     <select
-                      value={showNewCaller ? '__new_caller__' : form.requested_by_contact_id}
+                      value={showNewContact ? '__new_contact__' : form.requested_by_contact_id}
                       onChange={e => handleRequestedByChange(e.target.value)}
                       className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8"
                     >
@@ -660,12 +683,12 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
                           {c.first_name} {c.last_name}{c.title ? ` — ${c.title}` : ''}{c.is_primary ? ' (Primary)' : ''}
                         </option>
                       ))}
-                      <option value="__new_caller__">+ New Caller</option>
+                      <option value="__new_contact__">+ New Contact</option>
                     </select>
                     <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                   </div>
 
-                  {!showNewCaller && form.requested_by_contact_id && (() => {
+                  {!showNewContact && form.requested_by_contact_id && (() => {
                     const c = contacts.find(ct => ct.id === form.requested_by_contact_id);
                     if (!c) return null;
                     return (
@@ -684,19 +707,19 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
                     );
                   })()}
 
-                  {showNewCaller && (
+                  {showNewContact && (
                     <div className="mt-3 bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
                       <div className="flex items-center gap-2 mb-1">
                         <UserPlus className="h-4 w-4 text-blue-600" />
-                        <p className="text-sm font-semibold text-gray-800">New Caller</p>
+                        <p className="text-sm font-semibold text-gray-800">New Contact</p>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">First Name <span className="text-red-500">*</span></label>
                           <input
                             type="text"
-                            value={newCallerFirst}
-                            onChange={e => setNewCallerFirst(e.target.value)}
+                            value={newContactFirst}
+                            onChange={e => setNewContactFirst(e.target.value)}
                             placeholder="First name"
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
@@ -705,8 +728,8 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
                           <label className="block text-xs font-medium text-gray-600 mb-1">Last Name <span className="text-red-500">*</span></label>
                           <input
                             type="text"
-                            value={newCallerLast}
-                            onChange={e => setNewCallerLast(e.target.value)}
+                            value={newContactLast}
+                            onChange={e => setNewContactLast(e.target.value)}
                             placeholder="Last name"
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
@@ -717,8 +740,9 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
                           <label className="block text-xs font-medium text-gray-600 mb-1">Phone</label>
                           <input
                             type="tel"
-                            value={newCallerPhone}
-                            onChange={e => setNewCallerPhone(e.target.value)}
+                            value={newContactPhone}
+                            onChange={e => setNewContactPhone(formatPhoneNumber(e.target.value))}
+                            maxLength={14}
                             placeholder="(555) 123-4567"
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
@@ -727,8 +751,8 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
                           <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
                           <input
                             type="email"
-                            value={newCallerEmail}
-                            onChange={e => setNewCallerEmail(e.target.value)}
+                            value={newContactEmail}
+                            onChange={e => setNewContactEmail(e.target.value)}
                             placeholder="email@example.com"
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
@@ -746,23 +770,9 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
                     </div>
                   )}
 
-                  {contacts.length === 0 && !showNewCaller && (
+                  {contacts.length === 0 && !showNewContact && (
                     <p className="text-xs text-gray-400 mt-1">No contacts found for this customer.</p>
                   )}
-                </div>
-              )}
-
-              {form.site_id && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">System</label>
-                  <div className="relative">
-                    <select value={form.system_id} onChange={e => setField('system_id', e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8">
-                      <option value="">Select a system...</option>
-                      {systems.map(s => <option key={s.id} value={s.id}>{s.name}{(s.system_types as any)?.name ? ` (${(s.system_types as any).name})` : ''}</option>)}
-                    </select>
-                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                  </div>
-                  {systems.length === 0 && <p className="text-xs text-gray-400 mt-1">No systems found for this site.</p>}
                 </div>
               )}
             </div>
