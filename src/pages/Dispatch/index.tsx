@@ -1,17 +1,24 @@
 import { useEffect, useState } from 'react';
-import { MapPin, Calendar as CalendarIcon, Clock } from 'lucide-react';
+import { MapPin, Calendar as CalendarIcon, Clock, CalendarDays } from 'lucide-react';
 import MapView from './MapView';
 import CalendarView from './CalendarView';
 import DailyDispatchView from './DailyDispatchView';
 
-type DispatchView = 'daily' | 'map' | 'calendar';
+type DispatchView = 'daily' | 'weekly' | 'monthly' | 'map';
 const STORAGE_KEY = 'dispatch:view';
+
+const VIEWS: { key: DispatchView; label: string; icon: typeof Clock }[] = [
+  { key: 'daily', label: 'Daily', icon: Clock },
+  { key: 'weekly', label: 'Weekly', icon: CalendarDays },
+  { key: 'monthly', label: 'Monthly', icon: CalendarIcon },
+  { key: 'map', label: 'Map', icon: MapPin },
+];
 
 export default function Dispatch() {
   const [view, setView] = useState<DispatchView>(() => {
     if (typeof window === 'undefined') return 'daily';
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored === 'calendar' || stored === 'map' || stored === 'daily') return stored;
+    if (VIEWS.some(v => v.key === stored)) return stored as DispatchView;
     return 'daily';
   });
 
@@ -23,8 +30,9 @@ export default function Dispatch() {
 
   const descriptions: Record<DispatchView, string> = {
     daily: 'Daily schedule showing each technician and their assigned jobs.',
+    weekly: 'Week view of work orders and sales appointments.',
+    monthly: 'Monthly calendar of work orders and sales appointments.',
     map: 'Live view of technicians, sales calls, and scheduled jobs.',
-    calendar: 'Monthly calendar of work orders and sales appointments.',
   };
 
   return (
@@ -36,45 +44,27 @@ export default function Dispatch() {
         </div>
 
         <div className="inline-flex items-center bg-gray-100 rounded-xl p-1">
-          <button
-            onClick={() => setView('daily')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-              view === 'daily'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Clock className="h-4 w-4" />
-            Daily
-          </button>
-          <button
-            onClick={() => setView('map')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-              view === 'map'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <MapPin className="h-4 w-4" />
-            Map
-          </button>
-          <button
-            onClick={() => setView('calendar')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-              view === 'calendar'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <CalendarIcon className="h-4 w-4" />
-            Calendar
-          </button>
+          {VIEWS.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setView(key)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                view === key
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
       {view === 'daily' && <DailyDispatchView />}
+      {view === 'weekly' && <CalendarView defaultMode="week" />}
+      {view === 'monthly' && <CalendarView defaultMode="month" />}
       {view === 'map' && <MapView />}
-      {view === 'calendar' && <CalendarView />}
     </div>
   );
 }

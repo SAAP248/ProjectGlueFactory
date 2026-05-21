@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, Phone, ExternalLink, Clock,
   AlertCircle, CheckCircle2, CircleDot, Pause, RotateCcw,
-  ChevronDown, ChevronUp, UserPlus, Wrench,
+  ChevronDown, ChevronUp, UserPlus, Wrench, Bell, BellRing,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import WorkOrderSlideOver from '../WorkOrders/WorkOrderSlideOver';
@@ -107,6 +107,8 @@ export default function DailyDispatchView() {
   const [openWorkOrderId, setOpenWorkOrderId] = useState<string | null>(null);
   const [assignWorkOrderId, setAssignWorkOrderId] = useState<string | null>(null);
   const [unassignedOpen, setUnassignedOpen] = useState(true);
+  const [notifyCustomer, setNotifyCustomer] = useState(false);
+  const [notifyTechnician, setNotifyTechnician] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -267,6 +269,42 @@ export default function DailyDispatchView() {
             >
               Today
             </button>
+          </div>
+
+          {/* Notification Toggles */}
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 cursor-pointer select-none group">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={notifyCustomer}
+                  onChange={e => setNotifyCustomer(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-gray-200 rounded-full peer-checked:bg-blue-600 transition-colors" />
+                <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow-sm peer-checked:translate-x-4 transition-transform" />
+              </div>
+              <Bell className={`h-3.5 w-3.5 ${notifyCustomer ? 'text-blue-600' : 'text-gray-400'}`} />
+              <span className={`text-xs font-medium ${notifyCustomer ? 'text-gray-900' : 'text-gray-500'}`}>
+                Notify Customer
+              </span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer select-none group">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={notifyTechnician}
+                  onChange={e => setNotifyTechnician(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-gray-200 rounded-full peer-checked:bg-blue-600 transition-colors" />
+                <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow-sm peer-checked:translate-x-4 transition-transform" />
+              </div>
+              <BellRing className={`h-3.5 w-3.5 ${notifyTechnician ? 'text-blue-600' : 'text-gray-400'}`} />
+              <span className={`text-xs font-medium ${notifyTechnician ? 'text-gray-900' : 'text-gray-500'}`}>
+                Notify Technician
+              </span>
+            </label>
           </div>
 
           {/* Legend */}

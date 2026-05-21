@@ -43,9 +43,13 @@ function isWorkOrder(appt: Appointment) {
   return !!appt.__woTechAssignment || !!appt.work_order_id;
 }
 
-export default function CalendarView() {
+interface CalendarViewProps {
+  defaultMode?: 'month' | 'week' | 'day';
+}
+
+export default function CalendarView({ defaultMode = 'month' }: CalendarViewProps) {
   const [viewDate, setViewDate] = useState(new Date());
-  const [calView, setCalView] = useState<'month' | 'week' | 'day'>('month');
+  const [calView, setCalView] = useState<'month' | 'week' | 'day'>(defaultMode);
   const [viewType, setViewType] = useState<ViewType>('all');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
