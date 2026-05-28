@@ -12,6 +12,17 @@ export interface WizardEmail {
   is_primary: boolean;
 }
 
+export interface WizardContact {
+  id: string;
+  first_name: string;
+  last_name: string;
+  title: string;
+  phone: string;
+  mobile: string;
+  email: string;
+  is_primary: boolean;
+}
+
 export interface WizardSystem {
   id: string;
   system_type_id: string;
@@ -48,6 +59,7 @@ export interface WizardState {
   newStatus: string;
   newPhones: WizardPhone[];
   newEmails: WizardEmail[];
+  contacts: WizardContact[];
 
   billingAddress: string;
   billingCity: string;

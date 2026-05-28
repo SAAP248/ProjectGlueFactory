@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
-import type { WizardState } from './types';
+import type { WizardState, WizardContact } from './types';
 import { DEFAULT_TERMS, generateProposalToken, generateAccountNumber } from './types';
 import WizardProgressBar from './WizardProgressBar';
 import Step1WhoWhere from './Step1WhoWhere';
@@ -31,6 +31,26 @@ interface Props {
   onDealCreated?: () => void;
 }
 
+function makeContactFromLead(lead?: LeadPrefill): WizardContact {
+  let firstName = '';
+  let lastName = '';
+  if (lead?.contactName) {
+    const parts = lead.contactName.trim().split(/\s+/);
+    firstName = parts[0] ?? '';
+    lastName = parts.slice(1).join(' ');
+  }
+  return {
+    id: crypto.randomUUID(),
+    first_name: firstName,
+    last_name: lastName,
+    title: '',
+    phone: lead?.contactPhone ?? '',
+    mobile: '',
+    email: lead?.contactEmail ?? '',
+    is_primary: true,
+  };
+}
+
 function makeInitialState(companyId?: string, companyName?: string, lead?: LeadPrefill): WizardState {
   const today = new Date();
   const expiry = new Date(today);
@@ -56,6 +76,7 @@ function makeInitialState(companyId?: string, companyName?: string, lead?: LeadP
     newStatus: 'prospect',
     newPhones: phones,
     newEmails: emails,
+    contacts: [makeContactFromLead(lead)],
 
     billingAddress: lead?.address ?? '',
     billingCity: lead?.city ?? '',
@@ -145,12 +166,15 @@ export default function NewDealWizard({ initialStage, prefilledCompanyId, prefil
   }
 
   const step1Warnings = useMemo(() => {
-    if (state.customerMode === 'existing') return [];
     const w: string[] = [];
-    if (state.newPhones.length === 0) w.push('No phone numbers added');
-    if (state.newEmails.length === 0) w.push('No email addresses added');
+    if (state.customerMode === 'new') {
+      if (state.newPhones.length === 0) w.push('No phone numbers added');
+      if (state.newEmails.length === 0) w.push('No email addresses added');
+    }
+    const hasValidContact = state.contacts.some(c => c.first_name.trim() || c.last_name.trim());
+    if (!hasValidContact) w.push('No contact name provided — at least one contact is required');
     return w;
-  }, [state.customerMode, state.newPhones, state.newEmails]);
+  }, [state.customerMode, state.newPhones, state.newEmails, state.contacts]);
 
   function validateStep(): boolean {
     if (step === 1) {
@@ -160,6 +184,11 @@ export default function NewDealWizard({ initialStage, prefilledCompanyId, prefil
       }
       if (state.customerMode === 'new' && !state.newCompanyName.trim()) {
         setStepError('Customer name is required.');
+        return false;
+      }
+      const hasValidContact = state.contacts.some(c => c.first_name.trim() || c.last_name.trim());
+      if (!hasValidContact) {
+        setStepError('At least one contact with a name is required.');
         return false;
       }
     }
@@ -222,6 +251,22 @@ export default function NewDealWizard({ initialStage, prefilledCompanyId, prefil
             }))
           );
         }
+      }
+
+      const validContacts = state.contacts.filter(c => c.first_name.trim() || c.last_name.trim());
+      if (validContacts.length > 0) {
+        await supabase.from('contacts').insert(
+          validContacts.map(c => ({
+            company_id: companyId,
+            first_name: c.first_name.trim(),
+            last_name: c.last_name.trim(),
+            title: c.title.trim() || null,
+            phone: c.phone.trim() || null,
+            mobile: c.mobile.trim() || null,
+            email: c.email.trim() || null,
+            is_primary: c.is_primary,
+          }))
+        );
       }
 
       if (state.siteMode === 'new' || !siteId) {

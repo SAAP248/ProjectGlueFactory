@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, X, Phone, Mail, MapPin, Building2, Home, AlertTriangle, ChevronDown, Sparkles } from 'lucide-react';
+import { Search, Plus, X, Phone, Mail, MapPin, Building2, Home, AlertTriangle, ChevronDown, Sparkles, UserPlus, User } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
-import type { WizardState, WizardPhone, WizardEmail } from './types';
+import type { WizardState, WizardPhone, WizardEmail, WizardContact } from './types';
 import { generateAccountNumber } from './types';
 
 interface CompanyResult {
@@ -146,6 +146,37 @@ export default function Step1WhoWhere({ state, onChange, warnings, leadPrefill }
     onChange({ newEmails: remaining });
   }
 
+  function addContact() {
+    const contact: WizardContact = {
+      id: crypto.randomUUID(),
+      first_name: '',
+      last_name: '',
+      title: '',
+      phone: '',
+      mobile: '',
+      email: '',
+      is_primary: state.contacts.length === 0,
+    };
+    onChange({ contacts: [...state.contacts, contact] });
+  }
+
+  function updateContact(id: string, updates: Partial<WizardContact>) {
+    onChange({ contacts: state.contacts.map(c => c.id === id ? { ...c, ...updates } : c) });
+  }
+
+  function removeContact(id: string) {
+    if (state.contacts.length <= 1) return;
+    const remaining = state.contacts.filter(c => c.id !== id);
+    if (!remaining.some(c => c.is_primary) && remaining.length > 0) {
+      remaining[0].is_primary = true;
+    }
+    onChange({ contacts: remaining });
+  }
+
+  function setPrimaryContact(id: string) {
+    onChange({ contacts: state.contacts.map(c => ({ ...c, is_primary: c.id === id })) });
+  }
+
   function handleSiteMatchesBilling(checked: boolean) {
     if (checked) {
       onChange({
@@ -284,6 +315,98 @@ export default function Step1WhoWhere({ state, onChange, warnings, leadPrefill }
               </div>
               <div className="text-sm text-blue-700 space-y-0.5">
                 {state.billingAddress && <p><MapPin className="inline h-3.5 w-3.5 mr-1" />{state.billingAddress}, {state.billingCity}, {state.billingState} {state.billingZip}</p>}
+              </div>
+            </div>
+          )}
+
+          {/* Contacts for existing customer */}
+          {state.existingCompanyId && (
+            <div className="mt-5">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <User className="h-3.5 w-3.5" /> Contacts *
+                </label>
+                <button onClick={addContact} className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700">
+                  <UserPlus className="h-3.5 w-3.5" /> Add Contact
+                </button>
+              </div>
+              {state.contacts.length === 0 && (
+                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  At least one contact is required for every deal.
+                </p>
+              )}
+              <div className="space-y-3">
+                {state.contacts.map((ct, idx) => (
+                  <div key={ct.id} className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPrimaryContact(ct.id)}
+                          className={`text-xs px-2 py-0.5 rounded-full font-semibold transition-colors ${
+                            ct.is_primary
+                              ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                              : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-blue-50 hover:text-blue-600'
+                          }`}
+                        >
+                          {ct.is_primary ? 'Primary' : 'Set Primary'}
+                        </button>
+                        <span className="text-xs text-gray-400">Contact {idx + 1}</span>
+                      </div>
+                      {state.contacts.length > 1 && (
+                        <button onClick={() => removeContact(ct.id)} className="p-1 text-gray-400 hover:text-red-500 transition-colors">
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <input
+                        type="text"
+                        placeholder="First name *"
+                        value={ct.first_name}
+                        onChange={e => updateContact(ct.id, { first_name: e.target.value })}
+                        className="border border-gray-300 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Last name *"
+                        value={ct.last_name}
+                        onChange={e => updateContact(ct.id, { last_name: e.target.value })}
+                        className="border border-gray-300 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Title / Role"
+                        value={ct.title}
+                        onChange={e => updateContact(ct.id, { title: e.target.value })}
+                        className="border border-gray-300 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <input
+                        type="tel"
+                        placeholder="Phone"
+                        value={ct.phone}
+                        onChange={e => updateContact(ct.id, { phone: e.target.value })}
+                        className="border border-gray-300 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        type="tel"
+                        placeholder="Mobile"
+                        value={ct.mobile}
+                        onChange={e => updateContact(ct.id, { mobile: e.target.value })}
+                        className="border border-gray-300 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        type="email"
+                        placeholder="Email"
+                        value={ct.email}
+                        onChange={e => updateContact(ct.id, { email: e.target.value })}
+                        className="border border-gray-300 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -434,6 +557,96 @@ export default function Step1WhoWhere({ state, onChange, warnings, leadPrefill }
                   <button onClick={() => removeEmail(em.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors">
                     <X className="h-4 w-4" />
                   </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Contacts Section */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                <User className="h-3.5 w-3.5" /> Contacts *
+              </label>
+              <button onClick={addContact} className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700">
+                <UserPlus className="h-3.5 w-3.5" /> Add Contact
+              </button>
+            </div>
+            {state.contacts.length === 0 && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                At least one contact is required for every deal.
+              </p>
+            )}
+            <div className="space-y-3">
+              {state.contacts.map((ct, idx) => (
+                <div key={ct.id} className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPrimaryContact(ct.id)}
+                        className={`text-xs px-2 py-0.5 rounded-full font-semibold transition-colors ${
+                          ct.is_primary
+                            ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                            : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-blue-50 hover:text-blue-600'
+                        }`}
+                      >
+                        {ct.is_primary ? 'Primary' : 'Set Primary'}
+                      </button>
+                      <span className="text-xs text-gray-400">Contact {idx + 1}</span>
+                    </div>
+                    {state.contacts.length > 1 && (
+                      <button onClick={() => removeContact(ct.id)} className="p-1 text-gray-400 hover:text-red-500 transition-colors">
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <input
+                      type="text"
+                      placeholder="First name *"
+                      value={ct.first_name}
+                      onChange={e => updateContact(ct.id, { first_name: e.target.value })}
+                      className="border border-gray-300 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Last name *"
+                      value={ct.last_name}
+                      onChange={e => updateContact(ct.id, { last_name: e.target.value })}
+                      className="border border-gray-300 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Title / Role"
+                      value={ct.title}
+                      onChange={e => updateContact(ct.id, { title: e.target.value })}
+                      className="border border-gray-300 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <input
+                      type="tel"
+                      placeholder="Phone"
+                      value={ct.phone}
+                      onChange={e => updateContact(ct.id, { phone: e.target.value })}
+                      className="border border-gray-300 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input
+                      type="tel"
+                      placeholder="Mobile"
+                      value={ct.mobile}
+                      onChange={e => updateContact(ct.id, { mobile: e.target.value })}
+                      className="border border-gray-300 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input
+                      type="email"
+                      placeholder="Email"
+                      value={ct.email}
+                      onChange={e => updateContact(ct.id, { email: e.target.value })}
+                      className="border border-gray-300 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
               ))}
             </div>
