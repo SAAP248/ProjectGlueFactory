@@ -84,6 +84,11 @@ interface Props {
   onClose: () => void;
   onSaved: () => void;
   prefilledCompanyId?: string;
+  prefilledDealId?: string;
+  prefilledSiteId?: string;
+  prefilledTitle?: string;
+  prefilledScopeOfWork?: string;
+  prefilledWorkOrderType?: string;
   editWorkOrderId?: string;
 }
 
@@ -127,7 +132,7 @@ function generateWoNumber(): string {
   return `WO-${Date.now().toString().slice(-6)}`;
 }
 
-export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, editWorkOrderId }: Props) {
+export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, prefilledDealId, prefilledSiteId, prefilledTitle, prefilledScopeOfWork, prefilledWorkOrderType, editWorkOrderId }: Props) {
   const [activeSection, setActiveSection] = useState(0);
   const [saving, setSaving] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -153,16 +158,16 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
   const [form, setForm] = useState<WorkOrderFormData>({
     source: 'office',
     company_id: prefilledCompanyId || '',
-    site_id: '',
+    site_id: prefilledSiteId || '',
     system_id: '',
     requested_by_contact_id: '',
     requested_by_name: '',
-    title: '',
-    work_order_type: 'service',
+    title: prefilledTitle || '',
+    work_order_type: prefilledWorkOrderType || 'service',
     priority: 'normal',
     status: 'unassigned',
     reason_for_visit: '',
-    scope_of_work: '',
+    scope_of_work: prefilledScopeOfWork || '',
     billing_type: 'not_billable',
     billing_rate: '',
     fixed_amount: '',
@@ -389,6 +394,7 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, e
         go_back_notes: form.is_go_back ? form.go_back_notes || null : null,
         go_back_work_order_id: form.is_go_back && form.go_back_work_order_id ? form.go_back_work_order_id : null,
         updated_at: new Date().toISOString(),
+        ...(prefilledDealId && !editWorkOrderId ? { deal_id: prefilledDealId } : {}),
       };
 
       let workOrderId = editWorkOrderId;

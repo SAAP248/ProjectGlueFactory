@@ -5,6 +5,7 @@ export type PipelineFilter = 'sales' | 'install' | 'office';
 export interface Deal {
   id: string;
   company_id: string;
+  site_id: string | null;
   title: string;
   value: number;
   probability: number;
@@ -20,6 +21,9 @@ export interface Deal {
   forecast_category: ForecastCategory;
   stage_entered_at: string;
   description: string | null;
+  scope_of_work: string | null;
+  internal_notes: string | null;
+  terms_and_conditions: string | null;
   created_at: string;
   assigned_employee_id: string | null;
   companies?: { name: string } | null;
@@ -139,4 +143,24 @@ export function formatCurrency(value: number): string {
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`;
   return `$${value.toLocaleString()}`;
+}
+
+export function getWorkOrderStatusColor(status: string, billingStatus?: string): { bg: string; text: string; border: string; label: string } {
+  if (billingStatus === 'paid') {
+    return { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-300', label: 'Paid' };
+  }
+  switch (status) {
+    case 'completed':
+      return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-300', label: 'Completed' };
+    case 'in_progress':
+      return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-300', label: 'In Progress' };
+    case 'on_hold':
+      return { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-300', label: 'On Hold' };
+    case 'cancelled':
+      return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', label: 'Cancelled' };
+    case 'scheduled':
+      return { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-300', label: 'Scheduled' };
+    default:
+      return { bg: 'bg-gray-50', text: 'text-gray-500', border: 'border-gray-200', label: 'Not Started' };
+  }
 }

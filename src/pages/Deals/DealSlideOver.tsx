@@ -2,14 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   X, MessageSquare, CheckSquare, Plus, Clock, CreditCard as Edit3, Save,
   AlertCircle, Send, FileText, User, Trash2, GripVertical, ShoppingBag, Search,
+  Wrench, FolderKanban, Calendar, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import type { Deal, Employee } from './types';
 import { useDealActivities } from './useDeals';
 import { supabase } from '../../lib/supabase';
 import {
   SALES_STAGES, INSTALL_STATUSES, OFFICE_STATUSES, FORECAST_CATEGORIES,
-  getStageColor, getDaysInStage, getAgingColor, formatCurrency,
+  getStageColor, getDaysInStage, getAgingColor, formatCurrency, getWorkOrderStatusColor,
 } from './types';
+import WorkOrderModal from '../WorkOrders/WorkOrderModal';
+import NewProjectModal from '../ProjectManagement/NewProjectModal';
 
 interface CatalogProduct {
   id: string;
@@ -48,7 +51,7 @@ interface Props {
   onUpdate: (dealId: string, updates: Partial<Deal>) => Promise<boolean>;
 }
 
-type ActiveTab = 'details' | 'proposal' | 'activity' | 'tasks';
+type ActiveTab = 'details' | 'proposal' | 'work_orders' | 'activity' | 'tasks';
 
 interface LineItem {
   id: string;
@@ -111,6 +114,40 @@ function useProposal(dealId: string | null) {
   return { estimateId, lineItems, setLineItems, notes, setNotes, terms, setTerms, loading, refetch: fetch };
 }
 
+interface DealWorkOrder {
+  id: string;
+  wo_number: string;
+  title: string;
+  status: string;
+  billing_status: string;
+  priority: string;
+  work_order_type: string;
+  scheduled_date: string | null;
+  assigned_to: string | null;
+  assigned_employee?: { first_name: string; last_name: string } | null;
+}
+
+function useDealWorkOrders(dealId: string | null) {
+  const [workOrders, setWorkOrders] = useState<DealWorkOrder[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetch = useCallback(async () => {
+    if (!dealId) return;
+    setLoading(true);
+    const { data } = await supabase
+      .from('work_orders')
+      .select('id, wo_number, title, status, billing_status, priority, work_order_type, scheduled_date, assigned_to, assigned_employee:employees!work_orders_assigned_to_fkey(first_name, last_name)')
+      .eq('deal_id', dealId)
+      .order('created_at', { ascending: false });
+    setWorkOrders((data ?? []) as DealWorkOrder[]);
+    setLoading(false);
+  }, [dealId]);
+
+  useEffect(() => { fetch(); }, [fetch]);
+
+  return { workOrders, loading, refetch: fetch };
+}
+
 export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Props) {
   const [activeTab, setActiveTab] = useState<ActiveTab>('details');
   const [editing, setEditing] = useState(false);
@@ -132,6 +169,11 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
 
   const { activities, tasks, addNote, addTask, toggleTask } = useDealActivities(deal?.id ?? null);
   const { estimateId, lineItems, setLineItems, notes, setNotes, terms, setTerms, loading: proposalLoading, refetch: refetchProposal } = useProposal(deal?.id ?? null);
+  const { workOrders, loading: workOrdersLoading, refetch: refetchWorkOrders } = useDealWorkOrders(deal?.id ?? null);
+  const [showCreateWO, setShowCreateWO] = useState(false);
+  const [showCreateProject, setShowCreateProject] = useState(false);
+  const [scopeExpanded, setScopeExpanded] = useState(false);
+  const [termsExpanded, setTermsExpanded] = useState(false);
 
   useEffect(() => {
     if (deal) {
@@ -145,6 +187,9 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
         expected_close_date: deal.expected_close_date ?? '',
         forecast_category: deal.forecast_category,
         description: deal.description ?? '',
+        scope_of_work: deal.scope_of_work ?? '',
+        internal_notes: deal.internal_notes ?? '',
+        terms_and_conditions: deal.terms_and_conditions ?? '',
         lost_reason: deal.lost_reason ?? '',
         assigned_employee_id: deal.assigned_employee_id ?? '',
       });
@@ -335,6 +380,7 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
   const tabs: { key: ActiveTab; label: string; count?: number }[] = [
     { key: 'details', label: 'Details' },
     { key: 'proposal', label: 'Proposal' },
+    { key: 'work_orders', label: 'Work Orders', count: workOrders.length },
     { key: 'activity', label: 'Activity', count: activities.length },
     { key: 'tasks', label: 'Tasks', count: tasks.filter(t => !t.is_done).length },
   ];
@@ -600,6 +646,81 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
                 )}
               </div>
 
+              {(deal.scope_of_work || editing) && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setScopeExpanded(e => !e)}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700"
+                  >
+                    Scope of Work
+                    {scopeExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  </button>
+                  {scopeExpanded && (
+                    editing ? (
+                      <textarea
+                        rows={4}
+                        className="mt-1.5 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        value={form.scope_of_work ?? ''}
+                        onChange={e => setForm(f => ({ ...f, scope_of_work: e.target.value }))}
+                      />
+                    ) : (
+                      <p className="mt-1.5 text-sm text-gray-600 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-lg p-3 border border-gray-100">
+                        {deal.scope_of_work || '—'}
+                      </p>
+                    )
+                  )}
+                </div>
+              )}
+
+              {(deal.terms_and_conditions || editing) && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setTermsExpanded(e => !e)}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700"
+                  >
+                    Terms & Conditions
+                    {termsExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  </button>
+                  {termsExpanded && (
+                    editing ? (
+                      <textarea
+                        rows={5}
+                        className="mt-1.5 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        value={form.terms_and_conditions ?? ''}
+                        onChange={e => setForm(f => ({ ...f, terms_and_conditions: e.target.value }))}
+                      />
+                    ) : (
+                      <p className="mt-1.5 text-sm text-gray-600 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-lg p-3 border border-gray-100">
+                        {deal.terms_and_conditions || '—'}
+                      </p>
+                    )
+                  )}
+                </div>
+              )}
+
+              {deal.internal_notes && !editing && (
+                <div>
+                  <label className="text-xs font-semibold text-amber-600 uppercase tracking-wider">Internal Notes</label>
+                  <p className="mt-1 text-sm text-amber-800 leading-relaxed bg-amber-50 rounded-lg p-3 border border-amber-100">
+                    {deal.internal_notes}
+                  </p>
+                </div>
+              )}
+              {editing && (
+                <div>
+                  <label className="text-xs font-semibold text-amber-600 uppercase tracking-wider">Internal Notes</label>
+                  <textarea
+                    rows={3}
+                    className="mt-1 w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none bg-amber-50/50"
+                    value={form.internal_notes ?? ''}
+                    onChange={e => setForm(f => ({ ...f, internal_notes: e.target.value }))}
+                    placeholder="Private notes visible only to your team..."
+                  />
+                </div>
+              )}
+
               <div className="pt-2 border-t border-gray-100">
                 <div className="grid grid-cols-3 gap-3 text-center">
                   {[
@@ -860,6 +981,85 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
             </div>
           )}
 
+          {activeTab === 'work_orders' && (
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-gray-900">Work Orders</h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowCreateProject(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <FolderKanban className="h-3.5 w-3.5" />
+                    Create Project
+                  </button>
+                  <button
+                    onClick={() => setShowCreateWO(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <Wrench className="h-3.5 w-3.5" />
+                    Create Work Order
+                  </button>
+                </div>
+              </div>
+
+              {workOrdersLoading ? (
+                <div className="text-center py-12 text-gray-400 text-sm">Loading work orders...</div>
+              ) : workOrders.length === 0 ? (
+                <div className="text-center py-12">
+                  <Wrench className="h-10 w-10 mx-auto mb-3 text-gray-300" />
+                  <p className="text-gray-500 text-sm font-medium">No work orders yet</p>
+                  <p className="text-gray-400 text-xs mt-1">Create a work order to dispatch a technician for this deal.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {workOrders.map(wo => {
+                    const statusColor = getWorkOrderStatusColor(wo.status, wo.billing_status);
+                    return (
+                      <div
+                        key={wo.id}
+                        className={`rounded-xl border-l-4 ${statusColor.border} ${statusColor.bg} border border-gray-200 p-4 transition-all hover:shadow-sm`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-mono text-gray-400">{wo.wo_number}</span>
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
+                                {statusColor.label}
+                              </span>
+                              {wo.priority === 'high' && (
+                                <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200">High</span>
+                              )}
+                              {wo.priority === 'emergency' && (
+                                <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-200">Emergency</span>
+                              )}
+                            </div>
+                            <p className="text-sm font-semibold text-gray-900 mt-1 truncate">{wo.title}</p>
+                            <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-500">
+                              <span className="capitalize">{wo.work_order_type}</span>
+                              {wo.scheduled_date && (
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  {new Date(wo.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                </span>
+                              )}
+                              {wo.assigned_employee && (
+                                <span className="flex items-center gap-1">
+                                  <User className="h-3 w-3" />
+                                  {wo.assigned_employee.first_name} {wo.assigned_employee.last_name}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'activity' && (
             <div className="p-6 space-y-4">
               <div className="flex gap-2">
@@ -1018,6 +1218,28 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
           <div className="w-2 h-2 rounded-full bg-emerald-400" />
           {toast}
         </div>
+      )}
+
+      {showCreateWO && deal && (
+        <WorkOrderModal
+          onClose={() => setShowCreateWO(false)}
+          onSaved={() => { setShowCreateWO(false); refetchWorkOrders(); showToast('Work order created'); }}
+          prefilledCompanyId={deal.company_id}
+          prefilledDealId={deal.id}
+          prefilledSiteId={deal.site_id ?? undefined}
+          prefilledTitle={`${deal.title} - Installation`}
+          prefilledScopeOfWork={deal.scope_of_work ?? undefined}
+          prefilledWorkOrderType="installation"
+        />
+      )}
+
+      {showCreateProject && deal && (
+        <NewProjectModal
+          onClose={() => setShowCreateProject(false)}
+          onSaved={() => { setShowCreateProject(false); showToast('Project created'); }}
+          dealId={deal.id}
+          prefilledCompanyId={deal.company_id}
+        />
       )}
     </>
   );

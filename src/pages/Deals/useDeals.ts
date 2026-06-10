@@ -12,7 +12,7 @@ export function useDeals() {
       .from('deals')
       .select('*, companies(name), assigned_employee:employees!deals_assigned_employee_id_fkey(first_name, last_name)')
       .order('created_at', { ascending: false });
-    if (data) setDeals(data as Deal[]);
+    if (data) setDeals(data as unknown as Deal[]);
   }, []);
 
   const fetchEmployees = useCallback(async () => {
