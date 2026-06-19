@@ -14,7 +14,7 @@ interface Props {
 }
 
 const STATUS_OPTIONS = ['all', 'unassigned', 'scheduled', 'in_progress', 'on_hold', 'go_back', 'completed', 'cancelled'];
-const TYPE_OPTIONS = ['all', 'installation', 'service', 'maintenance', 'inspection'];
+const TYPE_OPTIONS = ['all', 'work_order', 'service_call', 'installation', 'maintenance', 'inspection', 'project'];
 const SOURCE_OPTIONS = ['all', 'phone_call', 'customer_request', 'office', 'dispatch'];
 
 const STATUS_STYLES: Record<string, string> = {
@@ -35,10 +35,13 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 const TYPE_LABELS: Record<string, string> = {
+  work_order: 'Work Order',
+  service_call: 'Service Call',
   installation: 'Install',
   service: 'Service',
   maintenance: 'Maint.',
   inspection: 'Inspect',
+  project: 'Project',
 };
 
 const BILLING_LABELS: Record<string, string> = {
@@ -434,8 +437,10 @@ export default function WorkOrdersList({ onViewDetail, initialFilter }: Props) {
                         <td className="px-5 py-3.5">
                           <span className={`text-xs font-medium px-2 py-1 rounded-full ${
                             wo.work_order_type === 'installation' ? 'bg-blue-100 text-blue-700' :
-                            wo.work_order_type === 'service' ? 'bg-teal-100 text-teal-700' :
+                            wo.work_order_type === 'service' || wo.work_order_type === 'service_call' ? 'bg-teal-100 text-teal-700' :
                             wo.work_order_type === 'maintenance' ? 'bg-amber-100 text-amber-700' :
+                            wo.work_order_type === 'project' ? 'bg-indigo-100 text-indigo-700' :
+                            wo.work_order_type === 'work_order' ? 'bg-gray-100 text-gray-700' :
                             'bg-gray-100 text-gray-600'
                           }`}>
                             {TYPE_LABELS[wo.work_order_type] || wo.work_order_type}

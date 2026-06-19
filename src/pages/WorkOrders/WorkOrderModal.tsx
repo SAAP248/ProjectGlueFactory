@@ -1,5 +1,9 @@
-import { useState, useEffect } from 'react';
-import { X, ChevronDown, Search, RotateCcw, AlertTriangle, Phone, MessageSquare, Building2, Radio, UserPlus, Star } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  X, ChevronDown, Search, RotateCcw, AlertTriangle, Phone, MessageSquare,
+  Building2, Radio, UserPlus, Star, Clock, Plus, Trash2, Package, Truck,
+  Calendar, Sun, Moon, Tag, StickyNote, ShieldAlert, MessageCircle,
+} from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface Employee {
@@ -14,6 +18,9 @@ interface Company {
   name: string;
   is_trouble_customer?: boolean;
   trouble_notes?: string;
+  notes?: string;
+  critical_notes?: string;
+  tags?: string[];
 }
 
 interface Site {
@@ -52,6 +59,33 @@ interface PastWO {
   scheduled_date: string | null;
 }
 
+interface Product {
+  id: string;
+  sku: string;
+  name: string;
+  category: string | null;
+  cost: number;
+  price: number;
+}
+
+interface PartLineItem {
+  key: string;
+  product_id: string | null;
+  description: string;
+  quantity: number;
+  unit_price: number;
+}
+
+interface TechAssignment {
+  employee_id: string;
+  scheduled_date: string | null;
+  scheduled_start_time: string | null;
+  scheduled_end_time: string | null;
+  work_order_title: string;
+}
+
+type TimeBlockMode = 'am' | 'pm' | 'specific';
+
 interface WorkOrderFormData {
   source: string;
   company_id: string;
@@ -68,16 +102,22 @@ interface WorkOrderFormData {
   billing_type: string;
   billing_rate: string;
   fixed_amount: string;
+  travel_fee: string;
   scheduled_date: string;
   scheduled_time: string;
+  time_block: TimeBlockMode;
   estimated_duration: string;
   notes: string;
   technician_ids: string[];
   lead_technician_id: string;
+  assign_date_only: boolean;
   is_go_back: boolean;
   go_back_work_order_id: string;
   go_back_reason_ids: string[];
   go_back_notes: string;
+  notify_customer: boolean;
+  notify_message: string;
+  notify_phone: string;
 }
 
 interface Props {
@@ -100,10 +140,12 @@ const SOURCE_OPTIONS = [
 ];
 
 const WO_TYPES = [
-  { value: 'installation', label: 'Installation' },
-  { value: 'service', label: 'Service' },
-  { value: 'maintenance', label: 'Maintenance' },
+  { value: 'work_order', label: 'Work Order' },
+  { value: 'service_call', label: 'Service Call' },
   { value: 'inspection', label: 'Inspection' },
+  { value: 'maintenance', label: 'Maintenance' },
+  { value: 'installation', label: 'Installation' },
+  { value: 'project', label: 'Project' },
 ];
 
 const PRIORITIES = [
@@ -128,8 +170,17 @@ const BILLING_TYPES = [
   { value: 'fixed', label: 'Billable - Fixed Price' },
 ];
 
+const HOUR_START = 6;
+const HOUR_END = 18;
+const TOTAL_HOURS = HOUR_END - HOUR_START;
+
 function generateWoNumber(): string {
   return `WO-${Date.now().toString().slice(-6)}`;
+}
+
+function timeToHourOffset(time: string): number {
+  const [h, m] = time.split(':').map(Number);
+  return h + m / 60 - HOUR_START;
 }
 
 export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, prefilledDealId, prefilledSiteId, prefilledTitle, prefilledScopeOfWork, prefilledWorkOrderType, editWorkOrderId }: Props) {
@@ -155,6 +206,16 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
   const [newContactEmail, setNewContactEmail] = useState('');
   const [addAsContact, setAddAsContact] = useState(true);
 
+  // Parts catalog
+  const [parts, setParts] = useState<PartLineItem[]>([]);
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [catalogLoading, setCatalogLoading] = useState(false);
+
+  // Technician availability
+  const [techAssignments, setTechAssignments] = useState<TechAssignment[]>([]);
+
   const [form, setForm] = useState<WorkOrderFormData>({
     source: 'office',
     company_id: prefilledCompanyId || '',
@@ -163,7 +224,7 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
     requested_by_contact_id: '',
     requested_by_name: '',
     title: prefilledTitle || '',
-    work_order_type: prefilledWorkOrderType || 'service',
+    work_order_type: prefilledWorkOrderType || 'service_call',
     priority: 'normal',
     status: 'unassigned',
     reason_for_visit: '',
@@ -171,16 +232,22 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
     billing_type: 'not_billable',
     billing_rate: '',
     fixed_amount: '',
+    travel_fee: '',
     scheduled_date: '',
     scheduled_time: '',
-    estimated_duration: '60',
+    time_block: 'am',
+    estimated_duration: '240',
     notes: '',
     technician_ids: [],
     lead_technician_id: '',
+    assign_date_only: false,
     is_go_back: false,
     go_back_work_order_id: '',
     go_back_reason_ids: [],
     go_back_notes: '',
+    notify_customer: false,
+    notify_message: '',
+    notify_phone: '',
   });
 
   const selectedCompany = companies.find(c => c.id === form.company_id);
@@ -208,14 +275,49 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
     else setSystems([]);
   }, [form.site_id]);
 
+  // Auto-select single site
+  useEffect(() => {
+    if (sites.length === 1 && !form.site_id) {
+      setForm(prev => ({ ...prev, site_id: sites[0].id }));
+    }
+  }, [sites]);
+
+  // Auto-select single system
+  useEffect(() => {
+    if (systems.length === 1 && !form.system_id) {
+      setForm(prev => ({ ...prev, system_id: systems[0].id }));
+    }
+  }, [systems]);
+
+  // Load tech assignments when date changes
+  useEffect(() => {
+    if (form.scheduled_date) loadTechAvailability(form.scheduled_date);
+    else setTechAssignments([]);
+  }, [form.scheduled_date]);
+
+  // Update notify message when relevant fields change
+  useEffect(() => {
+    if (form.notify_customer) {
+      const contact = contacts.find(c => c.id === form.requested_by_contact_id);
+      const name = contact ? contact.first_name : 'there';
+      const type = WO_TYPES.find(t => t.value === form.work_order_type)?.label || 'appointment';
+      const dateStr = form.scheduled_date ? new Date(form.scheduled_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '[Date TBD]';
+      const timeStr = form.time_block === 'am' ? 'AM (8:00-12:00)' : form.time_block === 'pm' ? 'PM (12:00-4:00)' : form.scheduled_time || '[Time TBD]';
+      setForm(prev => ({
+        ...prev,
+        notify_message: `Hi ${name}, your ${type} has been scheduled for ${dateStr} ${timeStr}. Please call us if you need to reschedule.`,
+      }));
+    }
+  }, [form.notify_customer, form.scheduled_date, form.time_block, form.scheduled_time, form.requested_by_contact_id, form.work_order_type, contacts]);
+
   async function loadDropdownData() {
     const [empRes, compRes, reasonsRes] = await Promise.all([
       supabase.from('employees').select('id, first_name, last_name, role').eq('status', 'active').order('first_name'),
-      supabase.from('companies').select('id, name, is_trouble_customer, trouble_notes').order('name'),
+      supabase.from('companies').select('id, name, is_trouble_customer, trouble_notes, notes, critical_notes, tags').order('name'),
       supabase.from('go_back_reasons').select('id, label').eq('is_active', true).order('sort_order'),
     ]);
     if (empRes.data) setEmployees(empRes.data);
-    if (compRes.data) setCompanies(compRes.data);
+    if (compRes.data) setCompanies(compRes.data as Company[]);
     if (reasonsRes.data) setGoBackReasons(reasonsRes.data);
   }
 
@@ -237,6 +339,11 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
       .order('is_primary', { ascending: false })
       .order('first_name');
     setContacts(data || []);
+    // Auto-set notify phone from primary contact
+    const primary = (data || []).find(c => c.is_primary);
+    if (primary?.phone) {
+      setForm(prev => ({ ...prev, notify_phone: primary.phone || '' }));
+    }
   }
 
   async function loadPastWOs(companyId: string) {
@@ -245,6 +352,34 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
       .eq('company_id', companyId).order('created_at', { ascending: false }).limit(50);
     setPastWOs(data || []);
   }
+
+  async function loadTechAvailability(date: string) {
+    const { data } = await supabase
+      .from('work_order_technicians')
+      .select('employee_id, scheduled_date, scheduled_start_time, scheduled_end_time, work_orders(title)')
+      .eq('scheduled_date', date);
+    if (data) {
+      setTechAssignments(data.map((d: any) => ({
+        employee_id: d.employee_id,
+        scheduled_date: d.scheduled_date,
+        scheduled_start_time: d.scheduled_start_time,
+        scheduled_end_time: d.scheduled_end_time,
+        work_order_title: d.work_orders?.title || 'Assigned',
+      })));
+    }
+  }
+
+  const loadCatalogProducts = useCallback(async () => {
+    setCatalogLoading(true);
+    const { data } = await supabase
+      .from('products')
+      .select('id, sku, name, category, cost, price')
+      .eq('is_active', true)
+      .order('name')
+      .limit(200);
+    setCatalogProducts(data || []);
+    setCatalogLoading(false);
+  }, []);
 
   async function loadExistingWorkOrder() {
     const { data } = await supabase
@@ -260,7 +395,7 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
         requested_by_contact_id: data.requested_by_contact_id || '',
         requested_by_name: data.requested_by_name || '',
         title: data.title || '',
-        work_order_type: data.work_order_type || 'service',
+        work_order_type: data.work_order_type || 'service_call',
         priority: data.priority || 'normal',
         status: data.status || 'unassigned',
         reason_for_visit: data.reason_for_visit || '',
@@ -268,22 +403,44 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
         billing_type: data.billing_type || 'not_billable',
         billing_rate: data.billing_rate?.toString() || '',
         fixed_amount: data.fixed_amount?.toString() || '',
+        travel_fee: data.travel_fee?.toString() || '',
         scheduled_date: data.scheduled_date || '',
         scheduled_time: data.scheduled_time || '',
-        estimated_duration: data.estimated_duration?.toString() || '60',
+        time_block: data.time_block || 'am',
+        estimated_duration: data.estimated_duration?.toString() || '240',
         notes: data.notes || '',
         technician_ids: techs.map((t: any) => t.employee_id),
         lead_technician_id: lead?.employee_id || '',
+        assign_date_only: false,
         is_go_back: data.is_go_back || false,
         go_back_work_order_id: data.go_back_work_order_id || '',
         go_back_reason_ids: data.go_back_reason_ids || [],
         go_back_notes: data.go_back_notes || '',
+        notify_customer: false,
+        notify_message: '',
+        notify_phone: '',
       });
       if (data.requested_by_name && !data.requested_by_contact_id) {
         setShowNewContact(true);
-        const parts = (data.requested_by_name || '').split(' ');
-        setNewContactFirst(parts[0] || '');
-        setNewContactLast(parts.slice(1).join(' ') || '');
+        const nameParts = (data.requested_by_name || '').split(' ');
+        setNewContactFirst(nameParts[0] || '');
+        setNewContactLast(nameParts.slice(1).join(' ') || '');
+      }
+      // Load existing parts
+      const { data: lineItems } = await supabase
+        .from('work_order_line_items')
+        .select('*')
+        .eq('work_order_id', editWorkOrderId)
+        .eq('line_type', 'part')
+        .order('created_at');
+      if (lineItems) {
+        setParts(lineItems.map((li: any) => ({
+          key: li.id,
+          product_id: li.product_id,
+          description: li.description,
+          quantity: li.quantity || 1,
+          unit_price: li.unit_price || 0,
+        })));
       }
     }
   }
@@ -329,7 +486,49 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
       setNewContactEmail('');
       setField('requested_by_contact_id', value);
       setField('requested_by_name', '');
+      // Update notify phone
+      const c = contacts.find(ct => ct.id === value);
+      if (c?.phone) setField('notify_phone', c.phone);
     }
+  }
+
+  function handleTimeBlockChange(block: TimeBlockMode) {
+    if (block === 'am') {
+      setForm(prev => ({ ...prev, time_block: 'am', scheduled_time: '08:00', estimated_duration: '240' }));
+    } else if (block === 'pm') {
+      setForm(prev => ({ ...prev, time_block: 'pm', scheduled_time: '12:00', estimated_duration: '240' }));
+    } else {
+      setForm(prev => ({ ...prev, time_block: 'specific', scheduled_time: prev.scheduled_time || '' }));
+    }
+  }
+
+  function addProductToParts(product: Product) {
+    setParts(prev => [...prev, {
+      key: crypto.randomUUID(),
+      product_id: product.id,
+      description: product.name,
+      quantity: 1,
+      unit_price: product.price,
+    }]);
+    setShowCatalog(false);
+  }
+
+  function addCustomPart() {
+    setParts(prev => [...prev, {
+      key: crypto.randomUUID(),
+      product_id: null,
+      description: '',
+      quantity: 1,
+      unit_price: 0,
+    }]);
+  }
+
+  function updatePart(key: string, field: keyof PartLineItem, value: any) {
+    setParts(prev => prev.map(p => p.key === key ? { ...p, [field]: value } : p));
+  }
+
+  function removePart(key: string) {
+    setParts(prev => prev.filter(p => p.key !== key));
   }
 
   async function handleSave(asDraft = false) {
@@ -368,6 +567,8 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
         }
       }
 
+      const resolvedStatus = form.assign_date_only ? 'unassigned' : (asDraft ? 'unassigned' : form.status);
+
       const payload: Record<string, any> = {
         source: form.source,
         company_id: form.company_id,
@@ -378,17 +579,19 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
         title: form.title.trim(),
         work_order_type: form.work_order_type,
         priority: form.priority,
-        status: asDraft ? 'unassigned' : form.status,
+        status: resolvedStatus,
         reason_for_visit: form.reason_for_visit || null,
         scope_of_work: form.scope_of_work || null,
         billing_type: form.billing_type,
         billing_rate: form.billing_rate ? parseFloat(form.billing_rate) : 0,
         fixed_amount: form.fixed_amount ? parseFloat(form.fixed_amount) : 0,
+        travel_fee: form.travel_fee ? parseFloat(form.travel_fee) : 0,
         scheduled_date: form.scheduled_date || null,
         scheduled_time: form.scheduled_time || null,
-        estimated_duration: parseInt(form.estimated_duration) || 60,
+        time_block: form.time_block,
+        estimated_duration: parseInt(form.estimated_duration) || 240,
         notes: form.notes || null,
-        assigned_to: form.lead_technician_id || null,
+        assigned_to: form.assign_date_only ? null : (form.lead_technician_id || null),
         is_go_back: form.is_go_back,
         go_back_reason_ids: form.is_go_back ? form.go_back_reason_ids : [],
         go_back_notes: form.is_go_back ? form.go_back_notes || null : null,
@@ -410,11 +613,12 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
       }
 
       if (workOrderId) {
+        // Technician assignments
         if (editWorkOrderId) {
           await supabase.from('work_order_technicians').delete().eq('work_order_id', workOrderId);
         }
-        if (form.technician_ids.length > 0) {
-          const durationMinutes = parseInt(form.estimated_duration) || 60;
+        if (!form.assign_date_only && form.technician_ids.length > 0) {
+          const durationMinutes = parseInt(form.estimated_duration) || 240;
           const startTime = form.scheduled_time || null;
           let endTime: string | null = null;
           if (startTime) {
@@ -436,6 +640,37 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
             }))
           );
         }
+
+        // Parts / line items
+        if (editWorkOrderId) {
+          await supabase.from('work_order_line_items').delete().eq('work_order_id', workOrderId).eq('line_type', 'part');
+        }
+        if (parts.length > 0) {
+          await supabase.from('work_order_line_items').insert(
+            parts.filter(p => p.description.trim()).map(p => ({
+              work_order_id: workOrderId,
+              product_id: p.product_id || null,
+              line_type: 'part',
+              description: p.description,
+              quantity: p.quantity,
+              unit_price: p.unit_price,
+              unit_cost: 0,
+            }))
+          );
+        }
+
+        // SMS notification log
+        if (form.notify_customer && form.notify_phone && form.notify_message) {
+          await supabase.from('sms_messages').insert({
+            company_id: form.company_id,
+            contact_id: form.requested_by_contact_id || null,
+            direction: 'outbound',
+            body: form.notify_message,
+            phone_number: form.notify_phone.replace(/\D/g, ''),
+            source: 'system',
+            sent_at: new Date().toISOString(),
+          });
+        }
       }
 
       onSaved();
@@ -448,7 +683,7 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
     }
   }
 
-  const sections = ['Source', 'Customer & Site', 'Job Info', 'Schedule', 'Billing', 'Dispatch'];
+  const sections = ['Source', 'Customer & Site', 'Job Info', 'Schedule', 'Billing', 'Dispatch', 'Notify'];
 
   const filteredEmployees = employees.filter(emp => {
     if (!techSearch) return true;
@@ -461,6 +696,14 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
     const s = woSearch.toLowerCase();
     return wo.wo_number.toLowerCase().includes(s) || wo.title.toLowerCase().includes(s);
   });
+
+  const filteredCatalog = catalogProducts.filter(p => {
+    if (!catalogSearch) return true;
+    const s = catalogSearch.toLowerCase();
+    return p.name.toLowerCase().includes(s) || p.sku.toLowerCase().includes(s) || (p.category || '').toLowerCase().includes(s);
+  });
+
+  const partsTotal = parts.reduce((sum, p) => sum + (p.quantity * p.unit_price), 0);
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -550,16 +793,10 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
               {form.is_go_back && (
                 <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Original Work Order (from same customer)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Original Work Order</label>
                     <div className="relative mb-2">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <input
-                        type="text"
-                        value={woSearch}
-                        onChange={e => setWoSearch(e.target.value)}
-                        placeholder="Search WO number or title..."
-                        className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                      />
+                      <input type="text" value={woSearch} onChange={e => setWoSearch(e.target.value)} placeholder="Search WO number or title..." className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
                     </div>
                     {!form.company_id && <p className="text-xs text-gray-400 italic">Select a customer first to see past work orders</p>}
                     {form.company_id && filteredPastWOs.length > 0 && (
@@ -570,54 +807,37 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
                             onClick={() => setField('go_back_work_order_id', form.go_back_work_order_id === wo.id ? '' : wo.id)}
                             className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors border-b last:border-b-0 border-gray-100 ${form.go_back_work_order_id === wo.id ? 'bg-orange-50' : ''}`}
                           >
-                            <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 transition-colors ${form.go_back_work_order_id === wo.id ? 'border-orange-500 bg-orange-500' : 'border-gray-300'}`} />
+                            <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${form.go_back_work_order_id === wo.id ? 'border-orange-500 bg-orange-500' : 'border-gray-300'}`} />
                             <span className="font-mono text-xs font-semibold text-orange-700">{wo.wo_number}</span>
                             <span className="text-sm text-gray-700 truncate">{wo.title}</span>
-                            {wo.scheduled_date && (
-                              <span className="text-xs text-gray-400 flex-shrink-0">
-                                {new Date(wo.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                              </span>
-                            )}
                           </button>
                         ))}
                       </div>
                     )}
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Go-Back Reasons (select all that apply)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Go-Back Reasons</label>
                     <div className="flex flex-wrap gap-2">
                       {goBackReasons.map(reason => {
                         const selected = form.go_back_reason_ids.includes(reason.id);
                         return (
-                          <button
-                            key={reason.id}
-                            onClick={() => toggleGoBackReason(reason.id)}
-                            className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${selected ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-700 border-gray-300 hover:border-orange-300'}`}
-                          >
+                          <button key={reason.id} onClick={() => toggleGoBackReason(reason.id)} className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${selected ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-700 border-gray-300 hover:border-orange-300'}`}>
                             {reason.label}
                           </button>
                         );
                       })}
                     </div>
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Go-Back Notes</label>
-                    <textarea
-                      value={form.go_back_notes}
-                      onChange={e => setField('go_back_notes', e.target.value)}
-                      rows={2}
-                      placeholder="Additional notes about why we're going back..."
-                      className="w-full px-3 py-2.5 border border-orange-200 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
-                    />
+                    <textarea value={form.go_back_notes} onChange={e => setField('go_back_notes', e.target.value)} rows={2} placeholder="Additional notes..." className="w-full px-3 py-2.5 border border-orange-200 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none" />
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* Section 1: Customer & Site (moved before Job Info) */}
+          {/* Section 1: Customer & Site */}
           {activeSection === 1 && (
             <div className="space-y-5">
               <div>
@@ -635,20 +855,53 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
                 </div>
               </div>
 
-              {selectedCompany?.is_trouble_customer && (
-                <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-bold text-amber-800">Trouble Customer — Office Staff Only</p>
-                    {selectedCompany.trouble_notes && <p className="text-sm text-amber-700 mt-1">{selectedCompany.trouble_notes}</p>}
-                    <p className="text-xs text-amber-600 mt-2">This information is not visible in the Technician Portal.</p>
-                  </div>
+              {/* Customer Context Panel */}
+              {selectedCompany && (selectedCompany.is_trouble_customer || selectedCompany.tags?.length || selectedCompany.critical_notes || selectedCompany.notes) && (
+                <div className="space-y-3">
+                  {selectedCompany.is_trouble_customer && (
+                    <div className="bg-red-50 border-2 border-red-300 rounded-xl p-4 flex items-start gap-3">
+                      <ShieldAlert className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-bold text-red-800">Trouble Customer</p>
+                        {selectedCompany.trouble_notes && <p className="text-sm text-red-700 mt-1">{selectedCompany.trouble_notes}</p>}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedCompany.tags && selectedCompany.tags.length > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Tag className="h-3.5 w-3.5 text-gray-400" />
+                      {selectedCompany.tags.map(tag => (
+                        <span key={tag} className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700 border border-blue-200">{tag}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {selectedCompany.critical_notes && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2.5">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide">Access / Gate Codes</p>
+                        <p className="text-sm text-amber-700 mt-0.5">{selectedCompany.critical_notes}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedCompany.notes && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-start gap-2.5">
+                      <StickyNote className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                      <p className="text-sm text-gray-600">{selectedCompany.notes}</p>
+                    </div>
+                  )}
                 </div>
               )}
 
               {form.company_id && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Site / Location</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Site / Location
+                    {sites.length === 1 && form.site_id && <span className="ml-2 text-xs text-emerald-600 font-normal">(auto-selected)</span>}
+                  </label>
                   <div className="relative">
                     <select value={form.site_id} onChange={e => { setField('site_id', e.target.value); setField('system_id', ''); }} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8">
                       <option value="">Select a site...</option>
@@ -662,7 +915,10 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
 
               {form.site_id && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">System</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    System
+                    {systems.length === 1 && form.system_id && <span className="ml-2 text-xs text-emerald-600 font-normal">(auto-selected)</span>}
+                  </label>
                   <div className="relative">
                     <select value={form.system_id} onChange={e => setField('system_id', e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8">
                       <option value="">Select a system...</option>
@@ -670,7 +926,6 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
                     </select>
                     <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                   </div>
-                  {systems.length === 0 && <p className="text-xs text-gray-400 mt-1">No systems found for this site.</p>}
                 </div>
               )}
 
@@ -722,84 +977,46 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">First Name <span className="text-red-500">*</span></label>
-                          <input
-                            type="text"
-                            value={newContactFirst}
-                            onChange={e => setNewContactFirst(e.target.value)}
-                            placeholder="First name"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
+                          <input type="text" value={newContactFirst} onChange={e => setNewContactFirst(e.target.value)} placeholder="First name" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">Last Name <span className="text-red-500">*</span></label>
-                          <input
-                            type="text"
-                            value={newContactLast}
-                            onChange={e => setNewContactLast(e.target.value)}
-                            placeholder="Last name"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
+                          <input type="text" value={newContactLast} onChange={e => setNewContactLast(e.target.value)} placeholder="Last name" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">Phone</label>
-                          <input
-                            type="tel"
-                            value={newContactPhone}
-                            onChange={e => setNewContactPhone(formatPhoneNumber(e.target.value))}
-                            maxLength={14}
-                            placeholder="(555) 123-4567"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
+                          <input type="tel" value={newContactPhone} onChange={e => setNewContactPhone(formatPhoneNumber(e.target.value))} maxLength={14} placeholder="(555) 123-4567" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
-                          <input
-                            type="email"
-                            value={newContactEmail}
-                            onChange={e => setNewContactEmail(e.target.value)}
-                            placeholder="email@example.com"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
+                          <input type="email" value={newContactEmail} onChange={e => setNewContactEmail(e.target.value)} placeholder="email@example.com" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         </div>
                       </div>
                       <label className="flex items-center gap-2 cursor-pointer select-none pt-1">
-                        <div
-                          onClick={() => setAddAsContact(!addAsContact)}
-                          className={`w-9 h-5 rounded-full transition-colors flex items-center flex-shrink-0 ${addAsContact ? 'bg-blue-500' : 'bg-gray-200'}`}
-                        >
+                        <div onClick={() => setAddAsContact(!addAsContact)} className={`w-9 h-5 rounded-full transition-colors flex items-center flex-shrink-0 ${addAsContact ? 'bg-blue-500' : 'bg-gray-200'}`}>
                           <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform mx-0.5 ${addAsContact ? 'translate-x-4' : 'translate-x-0'}`} />
                         </div>
                         <span className="text-sm text-gray-700">Add this person as a contact on the account</span>
                       </label>
                     </div>
                   )}
-
-                  {contacts.length === 0 && !showNewContact && (
-                    <p className="text-xs text-gray-400 mt-1">No contacts found for this customer.</p>
-                  )}
                 </div>
               )}
             </div>
           )}
 
-          {/* Section 2: Job Info (moved after Customer & Site) */}
+          {/* Section 2: Job Info */}
           {activeSection === 2 && (
             <div className="space-y-5">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Title <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  value={form.title}
-                  onChange={e => setField('title', e.target.value)}
-                  placeholder="Brief description of the job"
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
+                <input type="text" value={form.title} onChange={e => setField('title', e.target.value)} placeholder="Brief description of the job" className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Work Order Type</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Type</label>
                   <div className="relative">
                     <select value={form.work_order_type} onChange={e => setField('work_order_type', e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8">
                       {WO_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -844,32 +1061,83 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
           {/* Section 3: Schedule */}
           {activeSection === 3 && (
             <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Scheduled Date</label>
-                  <input type="date" value={form.scheduled_date} onChange={e => setField('scheduled_date', e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Scheduled Time</label>
-                  <input type="time" value={form.scheduled_time} onChange={e => setField('scheduled_time', e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-              </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Estimated Duration</label>
-                <div className="relative">
-                  <select value={form.estimated_duration} onChange={e => setField('estimated_duration', e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8">
-                    <option value="30">30 minutes</option>
-                    <option value="60">1 hour</option>
-                    <option value="90">1.5 hours</option>
-                    <option value="120">2 hours</option>
-                    <option value="180">3 hours</option>
-                    <option value="240">4 hours</option>
-                    <option value="360">6 hours</option>
-                    <option value="480">8 hours (full day)</option>
-                  </select>
-                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Scheduled Date</label>
+                <input type="date" value={form.scheduled_date} onChange={e => setField('scheduled_date', e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Time Window</label>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleTimeBlockChange('am')}
+                    className={`flex flex-col items-center gap-1.5 p-4 rounded-xl border-2 transition-all ${
+                      form.time_block === 'am' ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <Sun className="h-5 w-5" />
+                    <span className="text-sm font-semibold">AM</span>
+                    <span className="text-xs text-gray-500">8:00 - 12:00</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTimeBlockChange('pm')}
+                    className={`flex flex-col items-center gap-1.5 p-4 rounded-xl border-2 transition-all ${
+                      form.time_block === 'pm' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <Moon className="h-5 w-5" />
+                    <span className="text-sm font-semibold">PM</span>
+                    <span className="text-xs text-gray-500">12:00 - 4:00</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTimeBlockChange('specific')}
+                    className={`flex flex-col items-center gap-1.5 p-4 rounded-xl border-2 transition-all ${
+                      form.time_block === 'specific' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <Clock className="h-5 w-5" />
+                    <span className="text-sm font-semibold">Specific</span>
+                    <span className="text-xs text-gray-500">Choose time</span>
+                  </button>
                 </div>
               </div>
+
+              {form.time_block === 'specific' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Start Time</label>
+                    <input type="time" value={form.scheduled_time} onChange={e => setField('scheduled_time', e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Duration</label>
+                    <div className="relative">
+                      <select value={form.estimated_duration} onChange={e => setField('estimated_duration', e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8">
+                        <option value="30">30 minutes</option>
+                        <option value="60">1 hour</option>
+                        <option value="90">1.5 hours</option>
+                        <option value="120">2 hours</option>
+                        <option value="180">3 hours</option>
+                        <option value="240">4 hours</option>
+                        <option value="360">6 hours</option>
+                        <option value="480">8 hours (full day)</option>
+                      </select>
+                      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {form.time_block !== 'specific' && (
+                <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                  <p className="text-xs text-blue-800">
+                    <span className="font-semibold">{form.time_block === 'am' ? 'Morning' : 'Afternoon'} block:</span>{' '}
+                    {form.time_block === 'am' ? '8:00 AM - 12:00 PM' : '12:00 PM - 4:00 PM'} (4-hour window)
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -887,97 +1155,390 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
                   ))}
                 </div>
               </div>
+
               {form.billing_type === 'hourly' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Hourly Rate</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
-                    <input type="number" step="0.01" min="0" value={form.billing_rate} onChange={e => setField('billing_rate', e.target.value)} placeholder="0.00" className="w-full pl-7 pr-12 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">/hr</span>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Hourly Rate</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                      <input type="number" step="0.01" min="0" value={form.billing_rate} onChange={e => setField('billing_rate', e.target.value)} placeholder="0.00" className="w-full pl-7 pr-12 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">/hr</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Travel Fee</label>
+                    <div className="relative">
+                      <Truck className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <input type="number" step="0.01" min="0" value={form.travel_fee} onChange={e => setField('travel_fee', e.target.value)} placeholder="0.00" className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
                   </div>
                 </div>
               )}
+
               {form.billing_type === 'fixed' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Fixed Price</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
-                    <input type="number" step="0.01" min="0" value={form.fixed_amount} onChange={e => setField('fixed_amount', e.target.value)} placeholder="0.00" className="w-full pl-7 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Fixed Price</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                      <input type="number" step="0.01" min="0" value={form.fixed_amount} onChange={e => setField('fixed_amount', e.target.value)} placeholder="0.00" className="w-full pl-7 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Travel Fee</label>
+                    <div className="relative">
+                      <Truck className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <input type="number" step="0.01" min="0" value={form.travel_fee} onChange={e => setField('travel_fee', e.target.value)} placeholder="0.00" className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
                   </div>
                 </div>
               )}
+
               {form.billing_type === 'not_billable' && (
                 <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
                   <p className="text-sm text-gray-600">This work order will not generate a customer charge. Use this for warranty work, callbacks, or internal maintenance.</p>
                 </div>
               )}
+
+              {/* Parts & Materials */}
+              <div className="border-t border-gray-100 pt-5">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                    <Package className="h-4 w-4 text-gray-500" />
+                    Parts & Materials
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { if (catalogProducts.length === 0) loadCatalogProducts(); setShowCatalog(true); }}
+                      className="text-xs font-medium px-3 py-1.5 rounded-lg border border-blue-300 text-blue-700 hover:bg-blue-50 transition-colors flex items-center gap-1"
+                    >
+                      <Search className="h-3 w-3" /> Browse Products
+                    </button>
+                    <button
+                      type="button"
+                      onClick={addCustomPart}
+                      className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1"
+                    >
+                      <Plus className="h-3 w-3" /> Custom Part
+                    </button>
+                  </div>
+                </div>
+
+                {showCatalog && (
+                  <div className="mb-4 border border-blue-200 rounded-xl p-3 bg-blue-50/50">
+                    <div className="relative mb-2">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <input
+                        type="text"
+                        value={catalogSearch}
+                        onChange={e => setCatalogSearch(e.target.value)}
+                        placeholder="Search products by name, SKU, or category..."
+                        className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg bg-white">
+                      {catalogLoading ? (
+                        <p className="p-3 text-sm text-gray-400 text-center">Loading...</p>
+                      ) : filteredCatalog.length === 0 ? (
+                        <p className="p-3 text-sm text-gray-400 text-center">No products found</p>
+                      ) : (
+                        filteredCatalog.slice(0, 30).map(p => (
+                          <button
+                            key={p.id}
+                            onClick={() => addProductToParts(p)}
+                            className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 border-b last:border-b-0 border-gray-50 text-left"
+                          >
+                            <div>
+                              <p className="text-sm font-medium text-gray-800">{p.name}</p>
+                              <p className="text-xs text-gray-500">{p.sku}{p.category ? ` · ${p.category}` : ''}</p>
+                            </div>
+                            <span className="text-sm font-semibold text-gray-700">${p.price.toFixed(2)}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                    <button onClick={() => setShowCatalog(false)} className="mt-2 text-xs text-gray-500 hover:text-gray-700">Close catalog</button>
+                  </div>
+                )}
+
+                {parts.length > 0 && (
+                  <div className="space-y-2">
+                    {parts.map(part => (
+                      <div key={part.key} className="flex items-center gap-2 p-2.5 bg-white border border-gray-200 rounded-lg">
+                        <input
+                          type="text"
+                          value={part.description}
+                          onChange={e => updatePart(part.key, 'description', e.target.value)}
+                          placeholder="Part description"
+                          className="flex-1 px-2 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                        <input
+                          type="number"
+                          min="1"
+                          value={part.quantity}
+                          onChange={e => updatePart(part.key, 'quantity', parseFloat(e.target.value) || 1)}
+                          className="w-16 px-2 py-1.5 border border-gray-200 rounded text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                        <div className="relative w-24">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={part.unit_price}
+                            onChange={e => updatePart(part.key, 'unit_price', parseFloat(e.target.value) || 0)}
+                            className="w-full pl-5 pr-2 py-1.5 border border-gray-200 rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                        <span className="text-xs font-semibold text-gray-600 w-16 text-right">${(part.quantity * part.unit_price).toFixed(2)}</span>
+                        <button onClick={() => removePart(part.key)} className="p-1 text-gray-400 hover:text-red-500 transition-colors">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex justify-end pt-2 border-t border-gray-100">
+                      <p className="text-sm font-semibold text-gray-700">Parts Total: <span className="text-blue-700">${partsTotal.toFixed(2)}</span></p>
+                    </div>
+                  </div>
+                )}
+
+                {parts.length === 0 && !showCatalog && (
+                  <p className="text-xs text-gray-400 mt-1">No parts added. Use the buttons above to add parts from your inventory or create custom line items.</p>
+                )}
+              </div>
             </div>
           )}
 
           {/* Section 5: Dispatch */}
           {activeSection === 5 && (
             <div className="space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">Assign Technicians</label>
-                <div className="relative mb-3">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    value={techSearch}
-                    onChange={e => setTechSearch(e.target.value)}
-                    placeholder="Search by name or role..."
-                    className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+              {/* Assign date only toggle */}
+              <label className="flex items-center gap-3 cursor-pointer select-none p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                <div
+                  onClick={() => setField('assign_date_only', !form.assign_date_only)}
+                  className={`w-10 h-5 rounded-full transition-colors flex items-center flex-shrink-0 ${form.assign_date_only ? 'bg-blue-500' : 'bg-gray-200'}`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform mx-0.5 ${form.assign_date_only ? 'translate-x-5' : 'translate-x-0'}`} />
                 </div>
-                {filteredEmployees.length === 0 ? (
-                  <p className="text-sm text-gray-400">No technicians found.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {filteredEmployees.map(emp => {
-                      const selected = form.technician_ids.includes(emp.id);
-                      const isLead = form.lead_technician_id === emp.id;
-                      return (
-                        <div
-                          key={emp.id}
-                          className={`flex items-center justify-between p-3.5 rounded-lg border-2 cursor-pointer transition-all ${selected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
-                          onClick={() => toggleTechnician(emp.id)}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${selected ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                              {emp.first_name[0]}{emp.last_name[0]}
-                            </div>
-                            <div>
-                              <p className={`text-sm font-medium ${selected ? 'text-blue-800' : 'text-gray-800'}`}>{emp.first_name} {emp.last_name}</p>
-                              <p className="text-xs text-gray-500 capitalize">{emp.role}</p>
-                            </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-800">Schedule date only — assign tech later</p>
+                  <p className="text-xs text-gray-500">This job will appear in dispatch as needing assignment</p>
+                </div>
+              </label>
+
+              {!form.assign_date_only && (
+                <>
+                  {/* Availability Timeline */}
+                  {form.scheduled_date && employees.length > 0 && (
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                        Technician Availability — {new Date(form.scheduled_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      </label>
+                      <div className="border border-gray-200 rounded-xl overflow-hidden">
+                        {/* Time header */}
+                        <div className="flex bg-gray-50 border-b border-gray-200">
+                          <div className="w-28 flex-shrink-0 px-2 py-1.5 text-xs font-medium text-gray-500">Tech</div>
+                          <div className="flex-1 flex">
+                            {Array.from({ length: TOTAL_HOURS }, (_, i) => (
+                              <div key={i} className="flex-1 text-center text-[10px] text-gray-400 py-1.5 border-l border-gray-100">
+                                {i + HOUR_START > 12 ? `${i + HOUR_START - 12}p` : i + HOUR_START === 12 ? '12p' : `${i + HOUR_START}a`}
+                              </div>
+                            ))}
                           </div>
-                          {selected && (
-                            <button
-                              onClick={e => { e.stopPropagation(); setField('lead_technician_id', isLead ? '' : emp.id); }}
-                              className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${isLead ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-300 hover:bg-blue-50'}`}
-                            >
-                              {isLead ? 'Lead' : 'Set Lead'}
-                            </button>
-                          )}
                         </div>
-                      );
-                    })}
+                        {/* Tech rows */}
+                        <div className="max-h-48 overflow-y-auto">
+                          {employees.filter(emp => emp.role.toLowerCase().includes('tech') || emp.role.toLowerCase().includes('field') || emp.role.toLowerCase().includes('install')).map(emp => {
+                            const empAssignments = techAssignments.filter(a => a.employee_id === emp.id);
+                            const isSelected = form.technician_ids.includes(emp.id);
+                            return (
+                              <div
+                                key={emp.id}
+                                onClick={() => toggleTechnician(emp.id)}
+                                className={`flex border-b last:border-b-0 border-gray-100 cursor-pointer hover:bg-blue-50/30 transition-colors ${isSelected ? 'bg-blue-50' : ''}`}
+                              >
+                                <div className="w-28 flex-shrink-0 px-2 py-2 flex items-center gap-1.5">
+                                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0 ${isSelected ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                                    {emp.first_name[0]}{emp.last_name[0]}
+                                  </div>
+                                  <span className="text-xs font-medium text-gray-700 truncate">{emp.first_name}</span>
+                                </div>
+                                <div className="flex-1 relative py-1.5">
+                                  <div className="absolute inset-0 flex">
+                                    {Array.from({ length: TOTAL_HOURS }, (_, i) => (
+                                      <div key={i} className="flex-1 border-l border-gray-50" />
+                                    ))}
+                                  </div>
+                                  {empAssignments.map((a, idx) => {
+                                    if (!a.scheduled_start_time) return null;
+                                    const start = timeToHourOffset(a.scheduled_start_time);
+                                    const end = a.scheduled_end_time ? timeToHourOffset(a.scheduled_end_time) : start + 1;
+                                    const left = Math.max(0, (start / TOTAL_HOURS) * 100);
+                                    const width = Math.min(100 - left, ((end - start) / TOTAL_HOURS) * 100);
+                                    return (
+                                      <div
+                                        key={idx}
+                                        className="absolute top-1 bottom-1 rounded bg-orange-200 border border-orange-300 flex items-center px-1 overflow-hidden"
+                                        style={{ left: `${left}%`, width: `${width}%` }}
+                                        title={a.work_order_title}
+                                      >
+                                        <span className="text-[9px] font-medium text-orange-800 truncate">{a.work_order_title}</span>
+                                      </div>
+                                    );
+                                  })}
+                                  {empAssignments.length === 0 && (
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                      <span className="text-[10px] text-emerald-500 font-medium">Available</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {!form.scheduled_date && (
+                    <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
+                      <p className="text-xs text-amber-700">Select a date in the Schedule tab to see technician availability.</p>
+                    </div>
+                  )}
+
+                  {/* Traditional tech list */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">Assign Technicians</label>
+                    <div className="relative mb-3">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <input type="text" value={techSearch} onChange={e => setTechSearch(e.target.value)} placeholder="Search by name or role..." className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    {filteredEmployees.length === 0 ? (
+                      <p className="text-sm text-gray-400">No technicians found.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {filteredEmployees.map(emp => {
+                          const selected = form.technician_ids.includes(emp.id);
+                          const isLead = form.lead_technician_id === emp.id;
+                          const empAssigns = techAssignments.filter(a => a.employee_id === emp.id);
+                          return (
+                            <div
+                              key={emp.id}
+                              className={`flex items-center justify-between p-3 rounded-lg border-2 cursor-pointer transition-all ${selected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                              onClick={() => toggleTechnician(emp.id)}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${selected ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                                  {emp.first_name[0]}{emp.last_name[0]}
+                                </div>
+                                <div>
+                                  <p className={`text-sm font-medium ${selected ? 'text-blue-800' : 'text-gray-800'}`}>{emp.first_name} {emp.last_name}</p>
+                                  <p className="text-xs text-gray-500 capitalize">
+                                    {emp.role}
+                                    {empAssigns.length > 0 && <span className="text-orange-600 ml-1">· {empAssigns.length} job{empAssigns.length > 1 ? 's' : ''} today</span>}
+                                  </p>
+                                </div>
+                              </div>
+                              {selected && (
+                                <button
+                                  onClick={e => { e.stopPropagation(); setField('lead_technician_id', isLead ? '' : emp.id); }}
+                                  className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${isLead ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-300 hover:bg-blue-50'}`}
+                                >
+                                  {isLead ? 'Lead' : 'Set Lead'}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-              {form.technician_ids.length > 0 && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-                  <p className="text-xs font-medium text-emerald-800">
-                    {form.technician_ids.length} technician{form.technician_ids.length !== 1 ? 's' : ''} assigned
-                    {form.lead_technician_id && ` · Lead: ${employees.find(e => e.id === form.lead_technician_id)?.first_name}`}
+                  {form.technician_ids.length > 0 && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                      <p className="text-xs font-medium text-emerald-800">
+                        {form.technician_ids.length} technician{form.technician_ids.length !== 1 ? 's' : ''} assigned
+                        {form.lead_technician_id && ` · Lead: ${employees.find(e => e.id === form.lead_technician_id)?.first_name}`}
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Section 6: Notify Customer */}
+          {activeSection === 6 && (
+            <div className="space-y-5">
+              <label className="flex items-center gap-3 cursor-pointer select-none p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                <div
+                  onClick={() => setField('notify_customer', !form.notify_customer)}
+                  className={`w-12 h-6 rounded-full transition-colors flex items-center flex-shrink-0 ${form.notify_customer ? 'bg-emerald-500' : 'bg-gray-200'}`}
+                >
+                  <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${form.notify_customer ? 'translate-x-6' : 'translate-x-0'}`} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                    <MessageCircle className="h-4 w-4 text-emerald-600" />
+                    Send text notification to customer
                   </p>
+                  <p className="text-xs text-gray-500 mt-0.5">Log an outbound SMS message about this appointment</p>
+                </div>
+              </label>
+
+              {form.notify_customer && (
+                <div className="space-y-4 p-4 bg-emerald-50/50 border border-emerald-200 rounded-xl">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Recipient Phone</label>
+                    <input
+                      type="tel"
+                      value={form.notify_phone}
+                      onChange={e => setField('notify_phone', formatPhoneNumber(e.target.value))}
+                      maxLength={14}
+                      placeholder="(555) 123-4567"
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    {contacts.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {contacts.filter(c => c.phone).slice(0, 3).map(c => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => setField('notify_phone', c.phone || '')}
+                            className="text-xs px-2 py-0.5 bg-white border border-gray-200 rounded-full text-gray-600 hover:border-emerald-300 transition-colors"
+                          >
+                            {c.first_name} · {c.phone}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Message</label>
+                    <textarea
+                      value={form.notify_message}
+                      onChange={e => setField('notify_message', e.target.value)}
+                      rows={4}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">{form.notify_message.length} characters</p>
+                  </div>
+                  <div className="p-3 bg-white border border-gray-200 rounded-lg">
+                    <p className="text-xs text-gray-500">
+                      <span className="font-semibold">Note:</span> This message will be logged in the customer's communication history. Actual SMS delivery requires integration setup.
+                    </p>
+                  </div>
                 </div>
               )}
-              <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
-                <p className="text-xs text-blue-800 leading-relaxed">
-                  <span className="font-semibold">Tip:</span> Each tech is scheduled for the date &amp; time above. To give techs different dates, different times, or to schedule a job across multiple days, open the work order and use the <span className="font-semibold">Technicians &amp; Schedule</span> card.
-                </p>
-              </div>
+
+              {!form.notify_customer && (
+                <div className="text-center py-8">
+                  <MessageCircle className="h-10 w-10 mx-auto mb-3 text-gray-200" />
+                  <p className="text-sm text-gray-400">Toggle on to compose a notification message</p>
+                </div>
+              )}
             </div>
           )}
         </div>
