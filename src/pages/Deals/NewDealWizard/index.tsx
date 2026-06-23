@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Timer } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import type { WizardState, WizardContact } from './types';
 import { DEFAULT_TERMS, generateProposalToken, generateAccountNumber } from './types';
@@ -9,6 +9,8 @@ import Step2Systems from './Step2Systems';
 import Step3Products from './Step3Products';
 import Step4ScopeTerms from './Step4ScopeTerms';
 import Step5ReviewSend from './Step5ReviewSend';
+import SalesCallTracker from '../SalesCallTracker';
+import type { SalesCallStatus } from '../../../lib/dealLifecycle';
 
 interface LeadPrefill {
   leadId: string;
@@ -27,6 +29,7 @@ interface Props {
   prefilledCompanyId?: string;
   prefilledCompanyName?: string;
   leadPrefill?: LeadPrefill;
+  quickStartSalesCall?: boolean;
   onClose: () => void;
   onDealCreated?: () => void;
 }
@@ -117,11 +120,26 @@ function makeInitialState(companyId?: string, companyName?: string, lead?: LeadP
   };
 }
 
-export default function NewDealWizard({ initialStage, prefilledCompanyId, prefilledCompanyName, leadPrefill, onClose, onDealCreated }: Props) {
+export default function NewDealWizard({ initialStage, prefilledCompanyId, prefilledCompanyName, leadPrefill, quickStartSalesCall, onClose, onDealCreated }: Props) {
   const [step, setStep] = useState(1);
   const [state, setState] = useState<WizardState>(() => makeInitialState(prefilledCompanyId, prefilledCompanyName, leadPrefill));
   const [saving, setSaving] = useState(false);
   const [stepError, setStepError] = useState('');
+
+  // Sales call tracking state
+  const [salesCallStatus, setSalesCallStatus] = useState<SalesCallStatus>('none');
+  const [salesCallStartedAt, setSalesCallStartedAt] = useState<string | null>(null);
+  const [createdDealId, setCreatedDealId] = useState<string | null>(null);
+  const [showSalesTracker, setShowSalesTracker] = useState(quickStartSalesCall || false);
+
+  // Hardcoded employee for prototype (first active employee)
+  const [currentEmployeeId, setCurrentEmployeeId] = useState('');
+
+  useEffect(() => {
+    supabase.from('employees').select('id').eq('status', 'active').limit(1).then(({ data }) => {
+      if (data?.[0]) setCurrentEmployeeId(data[0].id);
+    });
+  }, []);
 
   useEffect(() => {
     if (!leadPrefill?.leadId) return;
@@ -314,6 +332,13 @@ export default function NewDealWizard({ initialStage, prefilledCompanyId, prefil
 
       if (dealErr || !deal) { setSaving(false); setStepError('Failed to create deal: ' + dealErr?.message); return; }
 
+      setCreatedDealId(deal.id);
+
+      // Start sales call timer automatically if tracker is active
+      if (showSalesTracker && salesCallStatus === 'none' && currentEmployeeId) {
+        setSalesCallStartedAt(new Date().toISOString());
+      }
+
       if (state.systems.length > 0) {
         await supabase.from('deal_systems').insert(
           state.systems.map((s, idx) => ({
@@ -414,6 +439,34 @@ export default function NewDealWizard({ initialStage, prefilledCompanyId, prefil
 
       <div className="flex-1 overflow-y-auto">
         <div className={`px-6 py-8 ${step === 3 ? 'max-w-screen-xl mx-auto' : 'max-w-4xl mx-auto'}`}>
+          {/* Sales Call Tracker */}
+          {step === 1 && (
+            <div className="mb-6">
+              {!showSalesTracker ? (
+                <button
+                  type="button"
+                  onClick={() => setShowSalesTracker(true)}
+                  className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-3 py-2 rounded-lg transition-colors"
+                >
+                  <Timer className="h-4 w-4" />
+                  Track Sales Call Time
+                </button>
+              ) : (
+                <SalesCallTracker
+                  dealId={createdDealId}
+                  employeeId={currentEmployeeId}
+                  currentStatus={salesCallStatus}
+                  startedAt={salesCallStartedAt}
+                  onStatusChange={(status) => {
+                    setSalesCallStatus(status);
+                    if (!salesCallStartedAt && status !== 'none') {
+                      setSalesCallStartedAt(new Date().toISOString());
+                    }
+                  }}
+                />
+              )}
+            </div>
+          )}
           {stepError && (
             <div className="mb-6 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
               {stepError}

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import {
   Plus, DollarSign, Trophy, Target, TrendingUp,
   Search, LayoutGrid, List, BarChart2, TrendingDown as ForecastIcon,
-  Calendar, Filter, X,
+  Calendar, Filter, X, Timer,
 } from 'lucide-react';
 import { useDeals } from './useDeals';
 import KanbanBoard from './KanbanBoard';
@@ -26,6 +26,7 @@ export default function Deals() {
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [showNewDeal, setShowNewDeal] = useState(false);
   const [quickAddStage, setQuickAddStage] = useState<string | undefined>();
+  const [quickStartMode, setQuickStartMode] = useState(false);
   const [statsTimeframe, setStatsTimeframe] = useState<'all' | '7d' | '30d' | '90d' | 'mtd' | 'qtd' | 'ytd'>('all');
   const [salesStatusFilter, setSalesStatusFilter] = useState<string>('all');
   const [installStatusFilter, setInstallStatusFilter] = useState<string>('all');
@@ -165,13 +166,22 @@ export default function Deals() {
           <h1 className="text-2xl font-bold text-gray-900">Deals Pipeline</h1>
           <p className="text-gray-500 mt-0.5 text-sm">Track and manage your sales opportunities</p>
         </div>
-        <button
-          onClick={() => { setQuickAddStage(undefined); setShowNewDeal(true); }}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium text-sm shadow-sm transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          New Proposal
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setQuickStartMode(true); setQuickAddStage(undefined); setShowNewDeal(true); }}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium text-sm shadow-sm transition-colors"
+          >
+            <Timer className="h-4 w-4" />
+            Quick Start Call
+          </button>
+          <button
+            onClick={() => { setQuickStartMode(false); setQuickAddStage(undefined); setShowNewDeal(true); }}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium text-sm shadow-sm transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            New Proposal
+          </button>
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -455,7 +465,8 @@ export default function Deals() {
       {showNewDeal && (
         <NewDealWizard
           initialStage={quickAddStage}
-          onClose={() => { setShowNewDeal(false); setQuickAddStage(undefined); }}
+          quickStartSalesCall={quickStartMode}
+          onClose={() => { setShowNewDeal(false); setQuickAddStage(undefined); setQuickStartMode(false); }}
           onDealCreated={() => { refetch(); }}
         />
       )}
