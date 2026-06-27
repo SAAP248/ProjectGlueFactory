@@ -16,7 +16,7 @@ import NewProjectModal from '../ProjectManagement/NewProjectModal';
 import SalesCallActions from './SalesCallActions';
 import { useDealTimeTracker } from '../../lib/useDealTimeTracker';
 import type { SalesCallStatus } from '../../lib/dealLifecycle';
-import { getStatusLabel, getStatusColor, getDealTimeEntries, calculateSalesCallDuration } from '../../lib/dealLifecycle';
+import { getDealTimeEntries, calculateSalesCallDuration } from '../../lib/dealLifecycle';
 
 interface CatalogProduct {
   id: string;
@@ -798,6 +798,31 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
                 </div>
               ) : (
                 <>
+                  {/* Proposal Link Actions */}
+                  <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                    <div className="flex-1">
+                      <p className="text-xs font-semibold text-blue-800">Customer Proposal Link</p>
+                      <p className="text-xs text-blue-600 mt-0.5 truncate font-mono">
+                        {window.location.origin}/#/proposal/{deal.proposal_token}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/#/proposal/${deal.proposal_token}`);
+                        showToast('Link copied!');
+                      }}
+                      className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors flex-shrink-0"
+                    >
+                      Copy Link
+                    </button>
+                    <button
+                      onClick={() => window.open(`/#/proposal/${deal.proposal_token}`, '_blank')}
+                      className="px-3 py-1.5 bg-white text-blue-700 text-xs font-semibold rounded-lg border border-blue-300 hover:bg-blue-50 transition-colors flex-shrink-0"
+                    >
+                      Preview
+                    </button>
+                  </div>
+
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-bold text-gray-900">Line Items</h3>

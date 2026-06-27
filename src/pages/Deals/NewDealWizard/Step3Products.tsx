@@ -60,12 +60,23 @@ export default function Step3Products({ state, onChange }: Props) {
     });
   }, [products, search, categoryFilter]);
 
-  const allGroups = [
-    ...state.systems.map(s => ({ id: s.id, name: s.name, isGeneral: false })),
-    { id: 'general', name: 'Other / General Items', isGeneral: true },
-  ];
+  const allGroups = state.groupingMode === 'by_room'
+    ? [
+        ...state.rooms.map(r => ({ id: r.id, name: r.name, isGeneral: false })),
+        { id: 'general', name: 'Other / Unassigned', isGeneral: true },
+      ]
+    : [
+        ...state.systems.map(s => ({ id: s.id, name: s.name, isGeneral: false })),
+        { id: 'general', name: 'Other / General Items', isGeneral: true },
+      ];
 
   function getItemsForGroup(groupId: string): WizardLineItem[] {
+    if (state.groupingMode === 'by_room') {
+      if (groupId === 'general') {
+        return state.lineItems.filter(i => !i.room_id).sort((a, b) => a.sort_order - b.sort_order);
+      }
+      return state.lineItems.filter(i => i.room_id === groupId).sort((a, b) => a.sort_order - b.sort_order);
+    }
     if (groupId === 'general') {
       return state.lineItems.filter(i => !i.system_group_id).sort((a, b) => a.sort_order - b.sort_order);
     }
@@ -74,10 +85,12 @@ export default function Step3Products({ state, onChange }: Props) {
 
   function addProductToGroup(product: ProductCatalogItem, groupId: string) {
     const groupItems = getItemsForGroup(groupId);
+    const isRoomMode = state.groupingMode === 'by_room';
     const newItem: WizardLineItem = {
       id: crypto.randomUUID(),
       product_id: product.id,
-      system_group_id: groupId === 'general' ? null : groupId,
+      system_group_id: isRoomMode ? (activeSystemId && activeSystemId !== 'general' ? activeSystemId : null) : (groupId === 'general' ? null : groupId),
+      room_id: isRoomMode ? (groupId === 'general' ? null : groupId) : null,
       description: product.name,
       quantity: 1,
       unit_cost: Number(product.cost),
@@ -89,10 +102,12 @@ export default function Step3Products({ state, onChange }: Props) {
 
   function addCustomItem(groupId: string) {
     const groupItems = getItemsForGroup(groupId);
+    const isRoomMode = state.groupingMode === 'by_room';
     const newItem: WizardLineItem = {
       id: crypto.randomUUID(),
       product_id: null,
-      system_group_id: groupId === 'general' ? null : groupId,
+      system_group_id: isRoomMode ? (activeSystemId && activeSystemId !== 'general' ? activeSystemId : null) : (groupId === 'general' ? null : groupId),
+      room_id: isRoomMode ? (groupId === 'general' ? null : groupId) : null,
       description: '',
       quantity: 1,
       unit_cost: 0,

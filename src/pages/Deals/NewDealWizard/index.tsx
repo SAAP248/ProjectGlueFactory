@@ -100,6 +100,8 @@ function makeInitialState(companyId?: string, companyName?: string, lead?: LeadP
     siteAlarmCode: '',
 
     systems: [],
+    rooms: [],
+    groupingMode: 'by_system',
     lineItems: [],
     marginThreshold: 30,
 
@@ -162,6 +164,7 @@ export default function NewDealWizard({ initialStage, prefilledCompanyId, prefil
         id: crypto.randomUUID(),
         product_id: li.product_id as string | null,
         system_group_id: null,
+        room_id: null,
         description: li.description as string,
         quantity: Number(li.quantity),
         unit_cost: Number(li.unit_cost),
@@ -367,7 +370,27 @@ export default function NewDealWizard({ initialStage, prefilledCompanyId, prefil
         total: subtotal,
         notes: state.scopeOfWork || null,
         terms: state.termsAndConditions || null,
+        grouping_mode: state.groupingMode,
       }).select('id').single();
+
+      // Save rooms
+      let roomIdMap: Record<string, string> = {};
+      if (!estErr && estimate && state.rooms.length > 0) {
+        const { data: savedRooms } = await supabase.from('proposal_rooms').insert(
+          state.rooms.map((r, idx) => ({
+            deal_id: deal.id,
+            estimate_id: estimate.id,
+            name: r.name,
+            description: r.description || null,
+            sort_order: idx,
+          }))
+        ).select('id, name');
+        if (savedRooms) {
+          savedRooms.forEach((sr: any, idx: number) => {
+            if (state.rooms[idx]) roomIdMap[state.rooms[idx].id] = sr.id;
+          });
+        }
+      }
 
       if (!estErr && estimate && state.lineItems.length > 0) {
         await supabase.from('estimate_line_items').insert(
@@ -375,6 +398,7 @@ export default function NewDealWizard({ initialStage, prefilledCompanyId, prefil
             estimate_id: estimate.id,
             product_id: item.product_id,
             system_group_id: item.system_group_id,
+            room_id: item.room_id ? (roomIdMap[item.room_id] || null) : null,
             description: item.description,
             quantity: item.quantity,
             unit_price: item.unit_price,

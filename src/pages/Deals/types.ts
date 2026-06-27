@@ -26,6 +26,7 @@ export interface Deal {
   terms_and_conditions: string | null;
   created_at: string;
   assigned_employee_id: string | null;
+  proposal_token?: string;
   companies?: { name: string } | null;
   assigned_employee?: { first_name: string; last_name: string } | null;
 }

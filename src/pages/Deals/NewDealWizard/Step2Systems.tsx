@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Check, ChevronDown, ChevronUp, Package } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Package, LayoutGrid, Layers, Plus, Trash2, GripVertical } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
-import type { WizardState, WizardSystem, SystemType, PackageCatalogItem } from './types';
+import type { WizardState, WizardSystem, WizardRoom, SystemType, PackageCatalogItem } from './types';
 import * as LucideIcons from 'lucide-react';
 
 interface Props {
@@ -188,6 +188,106 @@ export default function Step2Systems({ state, onChange }: Props) {
 
       {state.systems.length === 0 && (
         <p className="text-center text-sm text-gray-400 py-4">Select at least one system type to continue.</p>
+      )}
+
+      {/* Proposal Layout / Grouping Mode */}
+      {state.systems.length > 0 && (
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-base font-bold text-gray-900 mb-1">Proposal Layout</h3>
+            <p className="text-sm text-gray-500">How should products be grouped on the proposal the customer sees?</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => onChange({ groupingMode: 'by_system' })}
+              className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
+                state.groupingMode === 'by_system' ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <Layers className={`h-5 w-5 ${state.groupingMode === 'by_system' ? 'text-blue-600' : 'text-gray-400'}`} />
+              <div className="text-left">
+                <p className={`text-sm font-semibold ${state.groupingMode === 'by_system' ? 'text-blue-700' : 'text-gray-700'}`}>By System</p>
+                <p className="text-xs text-gray-500">Group by Alarm, Cameras, etc.</p>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange({ groupingMode: 'by_room' })}
+              className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
+                state.groupingMode === 'by_room' ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <LayoutGrid className={`h-5 w-5 ${state.groupingMode === 'by_room' ? 'text-blue-600' : 'text-gray-400'}`} />
+              <div className="text-left">
+                <p className={`text-sm font-semibold ${state.groupingMode === 'by_room' ? 'text-blue-700' : 'text-gray-700'}`}>By Room</p>
+                <p className="text-xs text-gray-500">Group by Living Room, Kitchen, etc.</p>
+              </div>
+            </button>
+          </div>
+
+          <p className="text-xs text-gray-400">Customers can toggle between views on the proposal page.</p>
+
+          {/* Room management (shown when by_room is selected) */}
+          {state.groupingMode === 'by_room' && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-semibold text-gray-700">Rooms</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newRoom: WizardRoom = {
+                      id: crypto.randomUUID(),
+                      name: '',
+                      description: '',
+                      sort_order: state.rooms.length,
+                    };
+                    onChange({ rooms: [...state.rooms, newRoom] });
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add Room
+                </button>
+              </div>
+
+              {state.rooms.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-4 border border-dashed border-gray-200 rounded-xl">
+                  Add rooms to organize products by location (e.g., Living Room, Kitchen, Master Bedroom)
+                </p>
+              )}
+
+              <div className="space-y-2">
+                {state.rooms.map((room, idx) => (
+                  <div key={room.id} className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2.5">
+                    <GripVertical className="h-4 w-4 text-gray-300 flex-shrink-0" />
+                    <input
+                      type="text"
+                      placeholder="Room name (e.g., Living Room)"
+                      value={room.name}
+                      onChange={e => {
+                        const updated = state.rooms.map((r, i) => i === idx ? { ...r, name: e.target.value } : r);
+                        onChange({ rooms: updated });
+                      }}
+                      className="flex-1 border-0 p-0 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-0"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => onChange({ rooms: state.rooms.filter((_, i) => i !== idx) })}
+                      className="p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-600 transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {state.rooms.length > 0 && state.rooms.some(r => !r.name.trim()) && (
+                <p className="text-xs text-amber-600">Each room needs a name.</p>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

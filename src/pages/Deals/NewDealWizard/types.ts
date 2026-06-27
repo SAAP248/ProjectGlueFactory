@@ -35,10 +35,20 @@ export interface WizardSystem {
   sort_order: number;
 }
 
+export interface WizardRoom {
+  id: string;
+  name: string;
+  description: string;
+  sort_order: number;
+}
+
+export type GroupingMode = 'by_system' | 'by_room';
+
 export interface WizardLineItem {
   id: string;
   product_id: string | null;
   system_group_id: string | null;
+  room_id: string | null;
   description: string;
   quantity: number;
   unit_cost: number;
@@ -80,6 +90,8 @@ export interface WizardState {
   siteAlarmCode: string;
 
   systems: WizardSystem[];
+  rooms: WizardRoom[];
+  groupingMode: GroupingMode;
 
   lineItems: WizardLineItem[];
   marginThreshold: number;
