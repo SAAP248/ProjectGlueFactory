@@ -232,6 +232,17 @@ export default function NewDealWizard({ initialStage, prefilledCompanyId, prefil
     setStepError('');
   }
 
+  async function handleSaveDraftAndExit() {
+    const hasCustomer = state.customerMode === 'existing'
+      ? !!state.existingCompanyId
+      : !!state.newCompanyName.trim();
+    if (!hasCustomer) {
+      onClose();
+      return;
+    }
+    await handleCreateDeal(null);
+  }
+
   async function handleCreateDeal(sendMode: 'email' | 'sms' | null) {
     setSaving(true);
     try {
@@ -307,7 +318,8 @@ export default function NewDealWizard({ initialStage, prefilledCompanyId, prefil
       }
 
       const customerName = state.customerMode === 'existing' ? state.existingCompanyName : state.newCompanyName;
-      const dealTitle = `${customerName} - ${state.systems.map(s => s.name).join(', ')}`;
+      const systemsSuffix = state.systems.length > 0 ? state.systems.map(s => s.name).join(', ') : 'New Proposal';
+      const dealTitle = `${customerName} - ${systemsSuffix}`;
       const totalRevenue = state.lineItems.reduce((s, i) => s + i.quantity * i.unit_price, 0);
 
       const isSending = !!sendMode;
@@ -452,11 +464,12 @@ export default function NewDealWizard({ initialStage, prefilledCompanyId, prefil
           <WizardProgressBar currentStep={step} />
 
           <button
-            onClick={onClose}
-            className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+            onClick={handleSaveDraftAndExit}
+            disabled={saving}
+            className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
           >
             <X className="h-4 w-4" />
-            <span className="hidden sm:inline">Save Draft & Exit</span>
+            <span className="hidden sm:inline">{saving ? 'Saving...' : 'Save Draft & Exit'}</span>
           </button>
         </div>
       </div>
