@@ -354,8 +354,9 @@ export default function NewDealWizard({ initialStage, prefilledCompanyId, prefil
         setSalesCallStartedAt(new Date().toISOString());
       }
 
+      let systemIdMap: Record<string, string> = {};
       if (state.systems.length > 0) {
-        await supabase.from('deal_systems').insert(
+        const { data: savedSystems } = await supabase.from('deal_systems').insert(
           state.systems.map((s, idx) => ({
             deal_id: deal.id,
             system_type_id: s.system_type_id,
@@ -363,7 +364,13 @@ export default function NewDealWizard({ initialStage, prefilledCompanyId, prefil
             name: s.name,
             sort_order: idx,
           }))
-        );
+        ).select('id, sort_order');
+        if (savedSystems) {
+          savedSystems.forEach((ds: any) => {
+            const localSystem = state.systems[ds.sort_order];
+            if (localSystem) systemIdMap[localSystem.id] = ds.id;
+          });
+        }
       }
 
       const today = new Date().toISOString().slice(0, 10);
@@ -409,7 +416,7 @@ export default function NewDealWizard({ initialStage, prefilledCompanyId, prefil
           state.lineItems.map((item, idx) => ({
             estimate_id: estimate.id,
             product_id: item.product_id,
-            system_group_id: item.system_group_id,
+            system_group_id: item.system_group_id ? (systemIdMap[item.system_group_id] || null) : null,
             room_id: item.room_id ? (roomIdMap[item.room_id] || null) : null,
             description: item.description,
             quantity: item.quantity,
