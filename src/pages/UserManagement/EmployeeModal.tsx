@@ -166,8 +166,9 @@ export default function EmployeeModal({ employee, canViewCompensation, onClose, 
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+    <>
+      <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
+      <div className="fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
           <h2 className="text-lg font-bold text-gray-900">{isEdit ? 'Edit Employee' : 'Add Employee'}</h2>
@@ -317,7 +318,7 @@ export default function EmployeeModal({ employee, canViewCompensation, onClose, 
           </button>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
