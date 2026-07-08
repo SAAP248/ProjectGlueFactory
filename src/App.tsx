@@ -35,6 +35,7 @@ import Tickets from './pages/Tickets/index';
 import Leads from './pages/Leads/index';
 import PhotosPage from './pages/Photos/index';
 import DocumentsPage from './pages/Documents/index';
+import UserManagement from './pages/UserManagement/index';
 
 function App() {
   const { role } = useRole();
@@ -133,6 +134,8 @@ function App() {
         return <PhotosPage />;
       case 'documents':
         return <DocumentsPage />;
+      case 'user-management':
+        return <UserManagement />;
       default:
         return <Dashboard onNavigate={setCurrentPage} />;
     }

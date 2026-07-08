@@ -28,6 +28,7 @@ const ALL_NAV = [
   'statements',
   'transactions',
   'time-attendance',
+  'user-management',
   'reports',
   'settings',
   'technician-portal',
@@ -48,6 +49,7 @@ export const ROLE_PAGES: Record<Role, string[]> = {
     'reports',
     'settings',
     'documents',
+    'user-management',
   ],
 
   sales_manager: [

@@ -30,6 +30,7 @@ import {
   Camera,
   FileText,
   Hash,
+  UserCog,
 } from 'lucide-react';
 import { useRole } from '../contexts/RoleContext';
 import { canAccessPage } from '../config/roleAccess';
@@ -76,6 +77,7 @@ const accountingItems = [
 
 const bottomNavItems = [
   { id: 'time-attendance', label: 'Time & Attendance', icon: Clock },
+  { id: 'user-management', label: 'User Management', icon: UserCog },
   { id: 'reports', label: 'Reports', icon: BarChart3 },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
