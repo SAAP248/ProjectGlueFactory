@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { FileText, Download, RotateCcw, TrendingUp, Users, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../../lib/supabase';
 
 interface GoBackWO {
   id: string;
@@ -26,10 +26,14 @@ interface GoBackStats {
   recent: GoBackWO[];
 }
 
+const ACTIONABLE_REPORTS: Record<string, string> = {
+  'Revenue by Type': 'revenue_by_type',
+};
+
 const reportCategories = [
   {
     name: 'Sales Reports',
-    reports: ['Sales by Technician', 'Revenue by Customer Type', 'Sales Pipeline Analysis', 'Monthly Sales Summary'],
+    reports: ['Revenue by Type', 'Sales by Technician', 'Sales Pipeline Analysis', 'Monthly Sales Summary'],
   },
   {
     name: 'Operations Reports',
@@ -56,7 +60,7 @@ function getDateRange(range: string): { from: string; to: string } {
   return { from: from.toISOString().split('T')[0], to };
 }
 
-export default function Reports() {
+export default function Reports({ onOpenReport }: { onOpenReport?: (report: string) => void }) {
   const [dateRange, setDateRange] = useState('30d');
   const [goBackStats, setGoBackStats] = useState<GoBackStats | null>(null);
   const [goBackReasons, setGoBackReasons] = useState<GoBackReason[]>([]);
@@ -345,7 +349,7 @@ export default function Reports() {
             <h3 className="text-lg font-bold text-gray-900 mb-4">{category.name}</h3>
             <div className="space-y-2">
               {category.reports.map((report, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
+                <div key={idx} onClick={() => { const key = ACTIONABLE_REPORTS[report]; if (key && onOpenReport) onOpenReport(key); }} className={`flex items-center justify-between p-3 rounded-lg transition-colors cursor-pointer ${ACTIONABLE_REPORTS[report] ? 'bg-blue-50 hover:bg-blue-100 border border-blue-100' : 'bg-gray-50 hover:bg-gray-100'}`}>
                   <div className="flex items-center">
                     <FileText className="h-5 w-5 text-gray-400 mr-3" />
                     <span className="text-sm font-medium text-gray-900">{report}</span>
