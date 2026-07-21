@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   X, ChevronDown, Search, RotateCcw, AlertTriangle, Phone, MessageSquare,
   Building2, Radio, UserPlus, Star, Clock, Plus, Trash2, Package, Truck,
-  Calendar, Sun, Moon, Tag, StickyNote, ShieldAlert, MessageCircle,
+  Calendar, Sun, Moon, Tag, StickyNote, ShieldAlert, MessageCircle, DollarSign, Check,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -212,6 +212,7 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [catalogSearch, setCatalogSearch] = useState('');
   const [catalogLoading, setCatalogLoading] = useState(false);
+  const [recentlyAdded, setRecentlyAdded] = useState<Set<string>>(new Set());
 
   // Technician availability
   const [techAssignments, setTechAssignments] = useState<TechAssignment[]>([]);
@@ -510,7 +511,8 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
       quantity: 1,
       unit_price: product.price,
     }]);
-    setShowCatalog(false);
+    setRecentlyAdded(prev => new Set(prev).add(product.id));
+    setTimeout(() => setRecentlyAdded(prev => { const n = new Set(prev); n.delete(product.id); return n; }), 1500);
   }
 
   function addCustomPart() {
@@ -705,6 +707,16 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
 
   const partsTotal = parts.reduce((sum, p) => sum + (p.quantity * p.unit_price), 0);
 
+  const laborEstimate = (() => {
+    const rate = parseFloat(form.billing_rate) || 0;
+    if (form.billing_type === 'fixed') return rate;
+    const durationHours = (parseInt(form.estimated_duration) || 0) / 60;
+    return rate * durationHours;
+  })();
+  const travelFee = parseFloat(form.travel_fee as any) || 0;
+  const estimatedTotal = laborEstimate + partsTotal + travelFee;
+  const hasEstimate = laborEstimate > 0 || partsTotal > 0 || travelFee > 0;
+
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
@@ -724,11 +736,14 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
             <button
               key={s}
               onClick={() => setActiveSection(i)}
-              className={`flex-shrink-0 flex-1 py-3 text-xs font-semibold uppercase tracking-wide transition-colors ${
+              className={`flex-shrink-0 flex-1 py-3 text-xs font-semibold uppercase tracking-wide transition-colors relative ${
                 activeSection === i ? 'text-blue-600 border-b-2 border-blue-600 bg-white' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
               {s}
+              {s === 'Billing' && parts.length > 0 && (
+                <span className="ml-1 inline-flex items-center justify-center w-4 h-4 text-[9px] font-bold bg-blue-600 text-white rounded-full">{parts.length}</span>
+              )}
             </button>
           ))}
         </div>
@@ -1476,22 +1491,29 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
                       ) : filteredCatalog.length === 0 ? (
                         <p className="p-3 text-sm text-gray-400 text-center">No products found</p>
                       ) : (
-                        filteredCatalog.slice(0, 30).map(p => (
-                          <button
-                            key={p.id}
-                            onClick={() => addProductToParts(p)}
-                            className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 border-b last:border-b-0 border-gray-50 text-left"
-                          >
-                            <div>
-                              <p className="text-sm font-medium text-gray-800">{p.name}</p>
-                              <p className="text-xs text-gray-500">{p.sku}{p.category ? ` · ${p.category}` : ''}</p>
-                            </div>
-                            <span className="text-sm font-semibold text-gray-700">${p.price.toFixed(2)}</span>
-                          </button>
-                        ))
+                        filteredCatalog.slice(0, 30).map(p => {
+                          const justAdded = recentlyAdded.has(p.id);
+                          return (
+                            <button
+                              key={p.id}
+                              onClick={() => addProductToParts(p)}
+                              className={`w-full flex items-center justify-between px-3 py-2 border-b last:border-b-0 border-gray-50 text-left transition-colors ${justAdded ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}
+                            >
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">{p.name}</p>
+                                <p className="text-xs text-gray-500">{p.sku}{p.category ? ` · ${p.category}` : ''}</p>
+                              </div>
+                              {justAdded ? (
+                                <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600"><Check className="h-3.5 w-3.5" /> Added</span>
+                              ) : (
+                                <span className="text-sm font-semibold text-gray-700">${p.price.toFixed(2)}</span>
+                              )}
+                            </button>
+                          );
+                        })
                       )}
                     </div>
-                    <button onClick={() => setShowCatalog(false)} className="mt-2 text-xs text-gray-500 hover:text-gray-700">Close catalog</button>
+                    <button onClick={() => { setShowCatalog(false); setCatalogSearch(''); }} className="mt-2 w-full py-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">Done browsing</button>
                   </div>
                 )}
 
@@ -1616,6 +1638,38 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
             </div>
           )}
         </div>
+
+        {/* Persistent Estimated Price Bar */}
+        {hasEstimate && (
+          <div className="px-6 py-3 bg-gradient-to-r from-slate-800 to-slate-900 border-t border-slate-700">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <DollarSign className="h-4 w-4 text-emerald-400" />
+                <div className="flex items-center gap-3 text-xs">
+                  {laborEstimate > 0 && (
+                    <span className="text-slate-300">Labor <span className="text-white font-semibold">${laborEstimate.toFixed(2)}</span></span>
+                  )}
+                  {partsTotal > 0 && (
+                    <span className="text-slate-300">
+                      {laborEstimate > 0 && <span className="text-slate-500 mx-1">+</span>}
+                      Parts <span className="text-white font-semibold">${partsTotal.toFixed(2)}</span>
+                    </span>
+                  )}
+                  {travelFee > 0 && (
+                    <span className="text-slate-300">
+                      {(laborEstimate > 0 || partsTotal > 0) && <span className="text-slate-500 mx-1">+</span>}
+                      Travel <span className="text-white font-semibold">${travelFee.toFixed(2)}</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Estimated Total</p>
+                <p className="text-lg font-bold text-emerald-400">${estimatedTotal.toFixed(2)}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
           <div className="flex gap-2">
