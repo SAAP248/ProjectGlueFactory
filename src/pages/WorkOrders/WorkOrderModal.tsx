@@ -683,7 +683,7 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
     }
   }
 
-  const sections = ['Source', 'Customer & Site', 'Job Info', 'Schedule', 'Billing', 'Dispatch', 'Notify'];
+  const sections = ['Source', 'Customer & Site', 'Job Info', 'Schedule & Assign', 'Billing', 'Notify'];
 
   const filteredEmployees = employees.filter(emp => {
     if (!techSearch) return true;
@@ -1058,9 +1058,35 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
             </div>
           )}
 
-          {/* Section 3: Schedule */}
+          {/* Section 3: Schedule & Assign */}
           {activeSection === 3 && (
             <div className="space-y-5">
+              {/* Assign date only toggle */}
+              <label className="flex items-center gap-3 cursor-pointer select-none p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                <div
+                  onClick={() => setField('assign_date_only', !form.assign_date_only)}
+                  className={`w-10 h-5 rounded-full transition-colors flex items-center flex-shrink-0 ${form.assign_date_only ? 'bg-blue-500' : 'bg-gray-200'}`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform mx-0.5 ${form.assign_date_only ? 'translate-x-5' : 'translate-x-0'}`} />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-800">Schedule date only — assign tech later</p>
+                  <p className="text-xs text-gray-500">Job will appear on the dispatch board for assignment</p>
+                </div>
+              </label>
+
+              {/* Customer time preference hint */}
+              {selectedCompany?.critical_notes && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide">Site Access Notes</p>
+                    <p className="text-xs text-amber-700 mt-0.5">{selectedCompany.critical_notes}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Date + Time Row */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Scheduled Date</label>
                 <input type="date" value={form.scheduled_date} onChange={e => setField('scheduled_date', e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -1072,35 +1098,35 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
                   <button
                     type="button"
                     onClick={() => handleTimeBlockChange('am')}
-                    className={`flex flex-col items-center gap-1.5 p-4 rounded-xl border-2 transition-all ${
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all ${
                       form.time_block === 'am' ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
-                    <Sun className="h-5 w-5" />
-                    <span className="text-sm font-semibold">AM</span>
-                    <span className="text-xs text-gray-500">8:00 - 12:00</span>
+                    <Sun className="h-4 w-4" />
+                    <span className="text-xs font-semibold">AM</span>
+                    <span className="text-[10px] text-gray-500">8:00 - 12:00</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => handleTimeBlockChange('pm')}
-                    className={`flex flex-col items-center gap-1.5 p-4 rounded-xl border-2 transition-all ${
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all ${
                       form.time_block === 'pm' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
-                    <Moon className="h-5 w-5" />
-                    <span className="text-sm font-semibold">PM</span>
-                    <span className="text-xs text-gray-500">12:00 - 4:00</span>
+                    <Moon className="h-4 w-4" />
+                    <span className="text-xs font-semibold">PM</span>
+                    <span className="text-[10px] text-gray-500">12:00 - 4:00</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => handleTimeBlockChange('specific')}
-                    className={`flex flex-col items-center gap-1.5 p-4 rounded-xl border-2 transition-all ${
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all ${
                       form.time_block === 'specific' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
-                    <Clock className="h-5 w-5" />
-                    <span className="text-sm font-semibold">Specific</span>
-                    <span className="text-xs text-gray-500">Choose time</span>
+                    <Clock className="h-4 w-4" />
+                    <span className="text-xs font-semibold">Specific</span>
+                    <span className="text-[10px] text-gray-500">Choose time</span>
                   </button>
                 </div>
               </div>
@@ -1130,12 +1156,219 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
                 </div>
               )}
 
-              {form.time_block !== 'specific' && (
-                <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
-                  <p className="text-xs text-blue-800">
-                    <span className="font-semibold">{form.time_block === 'am' ? 'Morning' : 'Afternoon'} block:</span>{' '}
-                    {form.time_block === 'am' ? '8:00 AM - 12:00 PM' : '12:00 PM - 4:00 PM'} (4-hour window)
+              {/* Duration-aware time preview */}
+              {form.time_block === 'specific' && form.scheduled_time && (
+                <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-emerald-600" />
+                  <p className="text-xs text-emerald-800 font-medium">
+                    {(() => {
+                      const [h, m] = form.scheduled_time.split(':').map(Number);
+                      const startStr = `${h > 12 ? h - 12 : h}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+                      const dur = parseInt(form.estimated_duration) || 240;
+                      const totalMin = h * 60 + m + dur;
+                      const endH = Math.floor(totalMin / 60) % 24;
+                      const endM = totalMin % 60;
+                      const endStr = `${endH > 12 ? endH - 12 : endH}:${String(endM).padStart(2, '0')} ${endH >= 12 ? 'PM' : 'AM'}`;
+                      return `Scheduled window: ${startStr} — ${endStr} (${dur >= 60 ? `${dur / 60}h` : `${dur}min`})`;
+                    })()}
                   </p>
+                </div>
+              )}
+
+              {form.time_block !== 'specific' && (
+                <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-blue-600" />
+                  <p className="text-xs text-blue-800 font-medium">
+                    {form.time_block === 'am' ? 'Morning block: 8:00 AM — 12:00 PM' : 'Afternoon block: 12:00 PM — 4:00 PM'} (4-hour window)
+                  </p>
+                </div>
+              )}
+
+              {/* Technician Assignment (only when not date-only) */}
+              {!form.assign_date_only && (
+                <>
+                  {/* Availability Timeline */}
+                  {form.scheduled_date && employees.length > 0 && (
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                        Technician Availability — {new Date(form.scheduled_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      </label>
+                      <div className="border border-gray-200 rounded-xl overflow-hidden">
+                        {/* Time header */}
+                        <div className="flex bg-gray-50 border-b border-gray-200">
+                          <div className="w-28 flex-shrink-0 px-2 py-1.5 text-xs font-medium text-gray-500">Tech</div>
+                          <div className="flex-1 flex">
+                            {Array.from({ length: TOTAL_HOURS }, (_, i) => (
+                              <div key={i} className="flex-1 text-center text-[10px] text-gray-400 py-1.5 border-l border-gray-100">
+                                {i + HOUR_START > 12 ? `${i + HOUR_START - 12}p` : i + HOUR_START === 12 ? '12p' : `${i + HOUR_START}a`}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        {/* Tech rows */}
+                        <div className="max-h-48 overflow-y-auto">
+                          {employees.filter(emp => emp.role.toLowerCase().includes('tech') || emp.role.toLowerCase().includes('field') || emp.role.toLowerCase().includes('install')).map(emp => {
+                            const empAssignments = techAssignments.filter(a => a.employee_id === emp.id);
+                            const isSelected = form.technician_ids.includes(emp.id);
+                            return (
+                              <div
+                                key={emp.id}
+                                onClick={() => toggleTechnician(emp.id)}
+                                className={`flex border-b last:border-b-0 border-gray-100 cursor-pointer hover:bg-blue-50/30 transition-colors ${isSelected ? 'bg-blue-50' : ''}`}
+                              >
+                                <div className="w-28 flex-shrink-0 px-2 py-2 flex items-center gap-1.5">
+                                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0 ${isSelected ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                                    {emp.first_name[0]}{emp.last_name[0]}
+                                  </div>
+                                  <span className="text-xs font-medium text-gray-700 truncate">{emp.first_name}</span>
+                                </div>
+                                <div className="flex-1 relative py-1.5">
+                                  <div className="absolute inset-0 flex">
+                                    {Array.from({ length: TOTAL_HOURS }, (_, i) => (
+                                      <div key={i} className="flex-1 border-l border-gray-50" />
+                                    ))}
+                                  </div>
+                                  {/* Show scheduled time block overlay */}
+                                  {isSelected && form.scheduled_time && (() => {
+                                    const start = timeToHourOffset(form.scheduled_time);
+                                    const dur = (parseInt(form.estimated_duration) || 240) / 60;
+                                    const left = Math.max(0, (start / TOTAL_HOURS) * 100);
+                                    const width = Math.min(100 - left, (dur / TOTAL_HOURS) * 100);
+                                    return (
+                                      <div
+                                        className="absolute top-1 bottom-1 rounded bg-blue-200 border border-blue-300 opacity-60"
+                                        style={{ left: `${left}%`, width: `${width}%` }}
+                                      />
+                                    );
+                                  })()}
+                                  {empAssignments.map((a, idx) => {
+                                    if (!a.scheduled_start_time) return null;
+                                    const start = timeToHourOffset(a.scheduled_start_time);
+                                    const end = a.scheduled_end_time ? timeToHourOffset(a.scheduled_end_time) : start + 1;
+                                    const left = Math.max(0, (start / TOTAL_HOURS) * 100);
+                                    const width = Math.min(100 - left, ((end - start) / TOTAL_HOURS) * 100);
+                                    // Conflict detection
+                                    let hasConflict = false;
+                                    if (isSelected && form.scheduled_time) {
+                                      const newStart = timeToHourOffset(form.scheduled_time);
+                                      const newEnd = newStart + (parseInt(form.estimated_duration) || 240) / 60;
+                                      hasConflict = newStart < end && newEnd > start;
+                                    }
+                                    return (
+                                      <div
+                                        key={idx}
+                                        className={`absolute top-1 bottom-1 rounded flex items-center px-1 overflow-hidden ${hasConflict ? 'bg-red-200 border border-red-400' : 'bg-orange-200 border border-orange-300'}`}
+                                        style={{ left: `${left}%`, width: `${width}%` }}
+                                        title={`${a.work_order_title}${hasConflict ? ' (CONFLICT)' : ''}`}
+                                      >
+                                        <span className={`text-[9px] font-medium truncate ${hasConflict ? 'text-red-800' : 'text-orange-800'}`}>{a.work_order_title}</span>
+                                      </div>
+                                    );
+                                  })}
+                                  {empAssignments.length === 0 && (
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                      <span className="text-[10px] text-emerald-500 font-medium">Available</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 mt-2">
+                        <span className="flex items-center gap-1.5 text-[10px] text-gray-500"><span className="w-3 h-2 rounded-sm bg-orange-200 border border-orange-300" />Existing job</span>
+                        <span className="flex items-center gap-1.5 text-[10px] text-gray-500"><span className="w-3 h-2 rounded-sm bg-blue-200 border border-blue-300" />This job</span>
+                        <span className="flex items-center gap-1.5 text-[10px] text-gray-500"><span className="w-3 h-2 rounded-sm bg-red-200 border border-red-400" />Conflict</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {!form.scheduled_date && (
+                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-center">
+                      <Calendar className="h-5 w-5 mx-auto text-gray-300 mb-1" />
+                      <p className="text-xs text-gray-500">Pick a date above to see technician availability</p>
+                    </div>
+                  )}
+
+                  {/* Technician List */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Assign Technicians</label>
+                    <div className="relative mb-2">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <input type="text" value={techSearch} onChange={e => setTechSearch(e.target.value)} placeholder="Search by name or role..." className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    {filteredEmployees.length === 0 ? (
+                      <p className="text-sm text-gray-400">No technicians found.</p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-52 overflow-y-auto">
+                        {filteredEmployees.map(emp => {
+                          const selected = form.technician_ids.includes(emp.id);
+                          const isLead = form.lead_technician_id === emp.id;
+                          const empAssigns = techAssignments.filter(a => a.employee_id === emp.id);
+                          // Check for scheduling conflict
+                          let hasConflict = false;
+                          if (selected && form.scheduled_time && empAssigns.length > 0) {
+                            const newStart = timeToHourOffset(form.scheduled_time);
+                            const newEnd = newStart + (parseInt(form.estimated_duration) || 240) / 60;
+                            hasConflict = empAssigns.some(a => {
+                              if (!a.scheduled_start_time) return false;
+                              const aStart = timeToHourOffset(a.scheduled_start_time);
+                              const aEnd = a.scheduled_end_time ? timeToHourOffset(a.scheduled_end_time) : aStart + 1;
+                              return newStart < aEnd && newEnd > aStart;
+                            });
+                          }
+                          return (
+                            <div
+                              key={emp.id}
+                              className={`flex items-center justify-between p-2.5 rounded-lg border-2 cursor-pointer transition-all ${hasConflict ? 'border-red-300 bg-red-50' : selected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                              onClick={() => toggleTechnician(emp.id)}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${selected ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                                  {emp.first_name[0]}{emp.last_name[0]}
+                                </div>
+                                <div>
+                                  <p className={`text-sm font-medium ${selected ? 'text-blue-800' : 'text-gray-800'}`}>{emp.first_name} {emp.last_name}</p>
+                                  <p className="text-xs text-gray-500 capitalize">
+                                    {emp.role}
+                                    {empAssigns.length > 0 && <span className="text-orange-600 ml-1">· {empAssigns.length} job{empAssigns.length > 1 ? 's' : ''} today</span>}
+                                    {hasConflict && <span className="text-red-600 ml-1 font-semibold">· TIME CONFLICT</span>}
+                                  </p>
+                                </div>
+                              </div>
+                              {selected && (
+                                <button
+                                  onClick={e => { e.stopPropagation(); setField('lead_technician_id', isLead ? '' : emp.id); }}
+                                  className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${isLead ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-300 hover:bg-blue-50'}`}
+                                >
+                                  {isLead ? 'Lead' : 'Set Lead'}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Assignment summary */}
+                  {form.technician_ids.length > 0 && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                      <p className="text-xs font-medium text-emerald-800">
+                        {form.technician_ids.length} technician{form.technician_ids.length !== 1 ? 's' : ''} assigned
+                        {form.lead_technician_id && ` · Lead: ${employees.find(e => e.id === form.lead_technician_id)?.first_name}`}
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {form.assign_date_only && form.scheduled_date && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-center">
+                  <Calendar className="h-6 w-6 mx-auto text-blue-400 mb-2" />
+                  <p className="text-sm font-medium text-blue-800">Scheduled for {new Date(form.scheduled_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+                  <p className="text-xs text-blue-600 mt-1">This job will appear in the dispatch board for technician assignment</p>
                 </div>
               )}
             </div>
@@ -1312,165 +1545,8 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
             </div>
           )}
 
-          {/* Section 5: Dispatch */}
+          {/* Section 5: Notify Customer */}
           {activeSection === 5 && (
-            <div className="space-y-5">
-              {/* Assign date only toggle */}
-              <label className="flex items-center gap-3 cursor-pointer select-none p-3 bg-gray-50 border border-gray-200 rounded-xl">
-                <div
-                  onClick={() => setField('assign_date_only', !form.assign_date_only)}
-                  className={`w-10 h-5 rounded-full transition-colors flex items-center flex-shrink-0 ${form.assign_date_only ? 'bg-blue-500' : 'bg-gray-200'}`}
-                >
-                  <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform mx-0.5 ${form.assign_date_only ? 'translate-x-5' : 'translate-x-0'}`} />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-800">Schedule date only — assign tech later</p>
-                  <p className="text-xs text-gray-500">This job will appear in dispatch as needing assignment</p>
-                </div>
-              </label>
-
-              {!form.assign_date_only && (
-                <>
-                  {/* Availability Timeline */}
-                  {form.scheduled_date && employees.length > 0 && (
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                        Technician Availability — {new Date(form.scheduled_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                      </label>
-                      <div className="border border-gray-200 rounded-xl overflow-hidden">
-                        {/* Time header */}
-                        <div className="flex bg-gray-50 border-b border-gray-200">
-                          <div className="w-28 flex-shrink-0 px-2 py-1.5 text-xs font-medium text-gray-500">Tech</div>
-                          <div className="flex-1 flex">
-                            {Array.from({ length: TOTAL_HOURS }, (_, i) => (
-                              <div key={i} className="flex-1 text-center text-[10px] text-gray-400 py-1.5 border-l border-gray-100">
-                                {i + HOUR_START > 12 ? `${i + HOUR_START - 12}p` : i + HOUR_START === 12 ? '12p' : `${i + HOUR_START}a`}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                        {/* Tech rows */}
-                        <div className="max-h-48 overflow-y-auto">
-                          {employees.filter(emp => emp.role.toLowerCase().includes('tech') || emp.role.toLowerCase().includes('field') || emp.role.toLowerCase().includes('install')).map(emp => {
-                            const empAssignments = techAssignments.filter(a => a.employee_id === emp.id);
-                            const isSelected = form.technician_ids.includes(emp.id);
-                            return (
-                              <div
-                                key={emp.id}
-                                onClick={() => toggleTechnician(emp.id)}
-                                className={`flex border-b last:border-b-0 border-gray-100 cursor-pointer hover:bg-blue-50/30 transition-colors ${isSelected ? 'bg-blue-50' : ''}`}
-                              >
-                                <div className="w-28 flex-shrink-0 px-2 py-2 flex items-center gap-1.5">
-                                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0 ${isSelected ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                                    {emp.first_name[0]}{emp.last_name[0]}
-                                  </div>
-                                  <span className="text-xs font-medium text-gray-700 truncate">{emp.first_name}</span>
-                                </div>
-                                <div className="flex-1 relative py-1.5">
-                                  <div className="absolute inset-0 flex">
-                                    {Array.from({ length: TOTAL_HOURS }, (_, i) => (
-                                      <div key={i} className="flex-1 border-l border-gray-50" />
-                                    ))}
-                                  </div>
-                                  {empAssignments.map((a, idx) => {
-                                    if (!a.scheduled_start_time) return null;
-                                    const start = timeToHourOffset(a.scheduled_start_time);
-                                    const end = a.scheduled_end_time ? timeToHourOffset(a.scheduled_end_time) : start + 1;
-                                    const left = Math.max(0, (start / TOTAL_HOURS) * 100);
-                                    const width = Math.min(100 - left, ((end - start) / TOTAL_HOURS) * 100);
-                                    return (
-                                      <div
-                                        key={idx}
-                                        className="absolute top-1 bottom-1 rounded bg-orange-200 border border-orange-300 flex items-center px-1 overflow-hidden"
-                                        style={{ left: `${left}%`, width: `${width}%` }}
-                                        title={a.work_order_title}
-                                      >
-                                        <span className="text-[9px] font-medium text-orange-800 truncate">{a.work_order_title}</span>
-                                      </div>
-                                    );
-                                  })}
-                                  {empAssignments.length === 0 && (
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                      <span className="text-[10px] text-emerald-500 font-medium">Available</span>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {!form.scheduled_date && (
-                    <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
-                      <p className="text-xs text-amber-700">Select a date in the Schedule tab to see technician availability.</p>
-                    </div>
-                  )}
-
-                  {/* Traditional tech list */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-3">Assign Technicians</label>
-                    <div className="relative mb-3">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <input type="text" value={techSearch} onChange={e => setTechSearch(e.target.value)} placeholder="Search by name or role..." className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    {filteredEmployees.length === 0 ? (
-                      <p className="text-sm text-gray-400">No technicians found.</p>
-                    ) : (
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {filteredEmployees.map(emp => {
-                          const selected = form.technician_ids.includes(emp.id);
-                          const isLead = form.lead_technician_id === emp.id;
-                          const empAssigns = techAssignments.filter(a => a.employee_id === emp.id);
-                          return (
-                            <div
-                              key={emp.id}
-                              className={`flex items-center justify-between p-3 rounded-lg border-2 cursor-pointer transition-all ${selected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
-                              onClick={() => toggleTechnician(emp.id)}
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${selected ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                                  {emp.first_name[0]}{emp.last_name[0]}
-                                </div>
-                                <div>
-                                  <p className={`text-sm font-medium ${selected ? 'text-blue-800' : 'text-gray-800'}`}>{emp.first_name} {emp.last_name}</p>
-                                  <p className="text-xs text-gray-500 capitalize">
-                                    {emp.role}
-                                    {empAssigns.length > 0 && <span className="text-orange-600 ml-1">· {empAssigns.length} job{empAssigns.length > 1 ? 's' : ''} today</span>}
-                                  </p>
-                                </div>
-                              </div>
-                              {selected && (
-                                <button
-                                  onClick={e => { e.stopPropagation(); setField('lead_technician_id', isLead ? '' : emp.id); }}
-                                  className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${isLead ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-300 hover:bg-blue-50'}`}
-                                >
-                                  {isLead ? 'Lead' : 'Set Lead'}
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                  {form.technician_ids.length > 0 && (
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-                      <p className="text-xs font-medium text-emerald-800">
-                        {form.technician_ids.length} technician{form.technician_ids.length !== 1 ? 's' : ''} assigned
-                        {form.lead_technician_id && ` · Lead: ${employees.find(e => e.id === form.lead_technician_id)?.first_name}`}
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Section 6: Notify Customer */}
-          {activeSection === 6 && (
             <div className="space-y-5">
               <label className="flex items-center gap-3 cursor-pointer select-none p-4 bg-gray-50 border border-gray-200 rounded-xl">
                 <div
