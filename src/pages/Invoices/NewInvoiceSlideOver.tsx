@@ -83,6 +83,133 @@ function nextKey(): string {
 }
 
 // ---------------------------------------------------------------------------
+// Self-contained product search per line item
+// ---------------------------------------------------------------------------
+
+function LineItemProductSearch({
+  description,
+  onDescriptionChange,
+  onProductSelect,
+}: {
+  description: string;
+  onDescriptionChange: (val: string) => void;
+  onProductSelect: (p: ProductOption) => void;
+}) {
+  const [term, setTerm] = useState(description);
+  const [results, setResults] = useState<ProductOption[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setTerm(description);
+  }, [description]);
+
+  const fetchProducts = useCallback(async (searchTerm: string) => {
+    setLoading(true);
+    let query = supabase
+      .from('products')
+      .select('id, name, price, sku, manufacturer, image_url')
+      .eq('is_active', true)
+      .limit(10);
+
+    if (searchTerm.trim().length >= 2) {
+      query = query.or(
+        `name.ilike.%${searchTerm.trim()}%,sku.ilike.%${searchTerm.trim()}%,manufacturer.ilike.%${searchTerm.trim()}%`
+      );
+    }
+
+    const { data } = await query.order('name');
+    setResults((data ?? []) as ProductOption[]);
+    setOpen(true);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const timeout = setTimeout(() => fetchProducts(term), 300);
+    return () => clearTimeout(timeout);
+  }, [term, open, fetchProducts]);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <input
+        type="text"
+        placeholder="Description — type to search products"
+        value={term}
+        onChange={(e) => {
+          setTerm(e.target.value);
+          onDescriptionChange(e.target.value);
+          if (!open) setOpen(true);
+        }}
+        onFocus={() => {
+          if (results.length > 0) setOpen(true);
+          else fetchProducts(term);
+        }}
+        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none pr-8"
+      />
+      <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300 pointer-events-none" />
+      {loading && (
+        <div className="absolute right-8 top-1/2 -translate-y-1/2">
+          <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-500" />
+        </div>
+      )}
+
+      {open && results.length > 0 && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+          {results.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onProductSelect(p);
+                setTerm(p.name);
+                setOpen(false);
+              }}
+              className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 flex items-center gap-3"
+            >
+              {p.image_url ? (
+                <img src={p.image_url} alt="" className="h-9 w-9 rounded-lg border border-gray-100 object-cover bg-gray-50 flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              ) : (
+                <div className="h-9 w-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                  <Package className="w-4 h-4 text-gray-400" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-gray-900 truncate">{p.name}</p>
+                <p className="text-xs text-gray-500 truncate">
+                  {[p.manufacturer, p.sku ? `SKU: ${p.sku}` : null].filter(Boolean).join(' · ') || 'No SKU'}
+                </p>
+              </div>
+              <span className="font-semibold text-gray-700 flex-shrink-0">
+                {formatCurrency(Number(p.price) || 0)}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {open && term.trim().length >= 2 && !loading && results.length === 0 && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs text-gray-500">
+          No matching products — text will be used as description
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -111,12 +238,7 @@ export default function NewInvoiceSlideOver({ open, onClose, onCreated }: Props)
     { key: nextKey(), description: '', quantity: 1, unit_price: 0, product_id: null },
   ]);
 
-  // ── Product search (per row) ─────────────────────────────────────────
-  const [activeProductRow, setActiveProductRow] = useState<string | null>(null);
-  const [productSearch, setProductSearch] = useState('');
-  const [productResults, setProductResults] = useState<ProductOption[]>([]);
-  const [productLoading, setProductLoading] = useState(false);
-  const productDropdownRef = useRef<HTMLDivElement>(null);
+
 
   // ── Submission ───────────────────────────────────────────────────────
   const [submitting, setSubmitting] = useState(false);
@@ -196,49 +318,12 @@ export default function NewInvoiceSlideOver({ open, onClose, onCreated }: Props)
   }, [selectedCompany]);
 
   // ====================================================================
-  // Product search debounce
-  // ====================================================================
-  const fetchProductResults = useCallback(async (term: string) => {
-    setProductLoading(true);
-    let query = supabase
-      .from('products')
-      .select('id, name, price, sku, manufacturer, image_url')
-      .eq('is_active', true)
-      .limit(10);
-
-    if (term.trim().length >= 2) {
-      query = query.or(
-        `name.ilike.%${term.trim()}%,sku.ilike.%${term.trim()}%,manufacturer.ilike.%${term.trim()}%`
-      );
-    }
-
-    const { data } = await query.order('name');
-    setProductResults((data ?? []) as ProductOption[]);
-    setProductLoading(false);
-  }, []);
-
-  useEffect(() => {
-    if (activeProductRow === null) {
-      setProductResults([]);
-      return;
-    }
-
-    const timeout = setTimeout(() => fetchProductResults(productSearch), 300);
-    return () => clearTimeout(timeout);
-  }, [productSearch, activeProductRow, fetchProductResults]);
-
-  // ====================================================================
-  // Click-outside handlers
+  // Click-outside handler for customer dropdown
   // ====================================================================
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (customerRef.current && !customerRef.current.contains(e.target as Node)) {
         setShowCustomerDropdown(false);
-      }
-      if (productDropdownRef.current && !productDropdownRef.current.contains(e.target as Node)) {
-        setActiveProductRow(null);
-        setProductSearch('');
-        setProductResults([]);
       }
     }
     document.addEventListener('mousedown', handleClick);
@@ -285,9 +370,6 @@ export default function NewInvoiceSlideOver({ open, onClose, onCreated }: Props)
             : li
         )
       );
-      setActiveProductRow(null);
-      setProductSearch('');
-      setProductResults([]);
     },
     []
   );
@@ -640,86 +722,11 @@ export default function NewInvoiceSlideOver({ open, onClose, onCreated }: Props)
                   className="border border-gray-200 rounded-lg p-3 bg-gray-50/50 space-y-2"
                 >
                   {/* Description with product search */}
-                  <div className="relative" ref={activeProductRow === item.key ? productDropdownRef : undefined}>
-                    <input
-                      type="text"
-                      placeholder="Description — type to search products"
-                      value={
-                        activeProductRow === item.key
-                          ? productSearch
-                          : item.description
-                      }
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (activeProductRow === item.key) {
-                          setProductSearch(val);
-                        } else {
-                          updateLineItem(item.key, 'description', val);
-                        }
-                      }}
-                      onFocus={() => {
-                        setActiveProductRow(item.key);
-                        setProductSearch(item.description);
-                      }}
-                      onBlur={() => {
-                        // Small delay so click on dropdown can register
-                        setTimeout(() => {
-                          if (activeProductRow === item.key) {
-                            // Sync the typed text back if user didn't select a product
-                            updateLineItem(item.key, 'description', productSearch);
-                            setActiveProductRow(null);
-                            setProductSearch('');
-                            setProductResults([]);
-                          }
-                        }, 200);
-                      }}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    />
-                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300" />
-
-                    {/* Product dropdown */}
-                    {activeProductRow === item.key && productResults.length > 0 && (
-                      <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                        {productResults.map((p) => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              selectProduct(item.key, p);
-                            }}
-                            className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 flex items-center gap-3"
-                          >
-                            {p.image_url ? (
-                              <img src={p.image_url} alt="" className="h-9 w-9 rounded-lg border border-gray-100 object-cover bg-gray-50 flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                            ) : (
-                              <div className="h-9 w-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                                <Package className="w-4 h-4 text-gray-400" />
-                              </div>
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <p className="font-medium text-gray-900 truncate">{p.name}</p>
-                              <p className="text-xs text-gray-500 truncate">
-                                {[p.manufacturer, p.sku ? `SKU: ${p.sku}` : null].filter(Boolean).join(' · ') || 'No SKU'}
-                              </p>
-                            </div>
-                            <span className="font-semibold text-gray-700 flex-shrink-0">
-                              {formatCurrency(Number(p.price) || 0)}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {activeProductRow === item.key &&
-                      productSearch.trim() &&
-                      !productLoading &&
-                      productResults.length === 0 && (
-                        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs text-gray-500">
-                          No matching products — text will be used as description
-                        </div>
-                      )}
-                  </div>
+                  <LineItemProductSearch
+                    description={item.description}
+                    onDescriptionChange={(val) => updateLineItem(item.key, 'description', val)}
+                    onProductSelect={(p) => selectProduct(item.key, p)}
+                  />
 
                   {/* Qty / Price / Total / Delete */}
                   <div className="flex items-center gap-2">
