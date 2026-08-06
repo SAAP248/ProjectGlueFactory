@@ -206,7 +206,7 @@ function ProductSearch({
       </div>
 
       {open && results.length > 0 && (
-        <div className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-gray-200 bg-white shadow-xl">
+        <div className="absolute z-50 mt-1 max-h-80 w-full overflow-auto rounded-xl border border-gray-200 bg-white shadow-xl">
           {results.map((p) => (
             <button
               key={p.id}
@@ -243,7 +243,7 @@ function ProductSearch({
 // ---------------------------------------------------------------------------
 
 export default function InvoiceDetail({ invoiceId, onBack }: Props) {
-  const { invoice, company, site, lineItems, loading, error, refetch } =
+  const { invoice, company, site, lineItems, loading, error, refetch, refetchLineItems } =
     useInvoiceDetail(invoiceId);
 
   // Line item editing state
@@ -258,6 +258,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
   const [newQty, setNewQty] = useState('1');
   const [newPrice, setNewPrice] = useState('');
   const [newProductId, setNewProductId] = useState<string | null>(null);
+  const [productSearchKey, setProductSearchKey] = useState(0);
 
   // Saving states
   const [saving, setSaving] = useState(false);
@@ -300,7 +301,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
       return;
     }
     setEditingLineItem(null);
-    refetch();
+    refetchLineItems();
   }
 
   async function handleDeleteLineItem(itemId: string) {
@@ -312,7 +313,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
       alert(`Error deleting line item: ${err}`);
       return;
     }
-    refetch();
+    refetchLineItems();
   }
 
   async function handleAddLineItem() {
@@ -321,24 +322,26 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
       return;
     }
     setSaving(true);
+    const qty = Number(newQty) || 1;
+    const price = Number(newPrice) || 0;
     const { error: err } = await addLineItem(invoiceId, {
       product_id: newProductId,
       description: newDesc,
-      quantity: Number(newQty) || 1,
-      unit_price: Number(newPrice) || 0,
-      total: (Number(newQty) || 1) * (Number(newPrice) || 0),
+      quantity: qty,
+      unit_price: price,
+      total: qty * price,
     });
     setSaving(false);
     if (err) {
       alert(`Error adding line item: ${err}`);
       return;
     }
-    setAddingLineItem(false);
     setNewDesc('');
     setNewQty('1');
     setNewPrice('');
     setNewProductId(null);
-    refetch();
+    setProductSearchKey((k) => k + 1);
+    refetchLineItems();
   }
 
   function handleDownloadPdf() {
@@ -647,7 +650,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
           </div>
 
           {/* --- Line Items Table --- */}
-          <div className="overflow-x-auto">
+          <div className="overflow-visible">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 text-left">
@@ -796,6 +799,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
                     <td className="py-2" />
                     <td className="py-2 pr-4">
                       <ProductSearch
+                        key={productSearchKey}
                         onSelect={(product, term) => {
                           if (product) {
                             setNewProductId(product.id);
@@ -955,3 +959,6 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
     </div>
   );
 }
+
+
+export default InvoiceDetail

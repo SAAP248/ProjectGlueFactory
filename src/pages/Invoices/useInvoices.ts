@@ -290,11 +290,30 @@ export function useInvoiceDetail(invoiceId: string | null) {
     setLoading(false);
   }, [invoiceId]);
 
+  const refetchLineItems = useCallback(async () => {
+    if (!invoiceId) return;
+    const [{ data: itemsData }, { data: invData }] = await Promise.all([
+      supabase
+        .from('invoice_line_items')
+        .select('*, products(image_url)')
+        .eq('invoice_id', invoiceId)
+        .order('sort_order', { ascending: true }),
+      supabase.from('invoices').select('*').eq('id', invoiceId).maybeSingle(),
+    ]);
+    const items = (itemsData || []).map((row: any) => ({
+      ...row,
+      product_image_url: row.products?.image_url ?? null,
+      products: undefined,
+    })) as InvoiceLineItem[];
+    setLineItems(items);
+    if (invData) setInvoice(invData as Invoice);
+  }, [invoiceId]);
+
   useEffect(() => {
     fetchDetail();
   }, [fetchDetail]);
 
-  return { invoice, company, site, lineItems, loading, error, refetch: fetchDetail };
+  return { invoice, company, site, lineItems, loading, error, refetch: fetchDetail, refetchLineItems };
 }
 
 // ---------------------------------------------------------------------------
