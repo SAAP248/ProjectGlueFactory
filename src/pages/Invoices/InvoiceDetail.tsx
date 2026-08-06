@@ -959,6 +959,3 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
     </div>
   );
 }
-
-
-export default InvoiceDetail
