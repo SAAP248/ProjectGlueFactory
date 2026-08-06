@@ -43,6 +43,8 @@ interface ProductOption {
   name: string;
   price: number | null;
   sku: string;
+  manufacturer: string | null;
+  image_url: string | null;
 }
 
 interface LineItemRow {
@@ -206,9 +208,9 @@ export default function NewInvoiceSlideOver({ open, onClose, onCreated }: Props)
       setProductLoading(true);
       const { data } = await supabase
         .from('products')
-        .select('id, name, price, sku')
+        .select('id, name, price, sku, manufacturer, image_url')
         .eq('is_active', true)
-        .ilike('name', `%${productSearch.trim()}%`)
+        .or(`name.ilike.%${productSearch.trim()}%,sku.ilike.%${productSearch.trim()}%,manufacturer.ilike.%${productSearch.trim()}%`)
         .order('name')
         .limit(10);
 
@@ -680,14 +682,22 @@ export default function NewInvoiceSlideOver({ open, onClose, onCreated }: Props)
                               e.preventDefault();
                               selectProduct(item.key, p);
                             }}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center justify-between"
+                            className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 flex items-center gap-3"
                           >
-                            <span className="flex items-center gap-2">
-                              <Package className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                              <span>{p.name}</span>
-                              <span className="text-gray-400 text-xs">{p.sku}</span>
-                            </span>
-                            <span className="font-medium text-gray-600">
+                            {p.image_url ? (
+                              <img src={p.image_url} alt="" className="h-9 w-9 rounded-lg border border-gray-100 object-cover bg-gray-50 flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            ) : (
+                              <div className="h-9 w-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                <Package className="w-4 h-4 text-gray-400" />
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-gray-900 truncate">{p.name}</p>
+                              <p className="text-xs text-gray-500 truncate">
+                                {[p.manufacturer, p.sku ? `SKU: ${p.sku}` : null].filter(Boolean).join(' · ') || 'No SKU'}
+                              </p>
+                            </div>
+                            <span className="font-semibold text-gray-700 flex-shrink-0">
                               {formatCurrency(Number(p.price) || 0)}
                             </span>
                           </button>

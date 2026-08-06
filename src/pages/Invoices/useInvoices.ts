@@ -39,7 +39,9 @@ export interface InvoiceLineItem {
   quantity: number;
   unit_price: number;
   total: number;
+  sort_order: number;
   created_at: string;
+  product_image_url?: string | null;
 }
 
 export interface Transaction {
@@ -273,10 +275,15 @@ export function useInvoiceDetail(invoiceId: string | null) {
     const fetchLineItems = async () => {
       const { data } = await supabase
         .from('invoice_line_items')
-        .select('*')
+        .select('*, products(image_url)')
         .eq('invoice_id', invoiceId)
-        .order('created_at', { ascending: true });
-      setLineItems((data || []) as InvoiceLineItem[]);
+        .order('sort_order', { ascending: true });
+      const items = (data || []).map((row: any) => ({
+        ...row,
+        product_image_url: row.products?.image_url ?? null,
+        products: undefined,
+      })) as InvoiceLineItem[];
+      setLineItems(items);
     };
 
     await Promise.all([fetchCompany(), fetchSite(), fetchLineItems()]);
@@ -408,6 +415,15 @@ export async function addLineItem(
   try {
     const lineTotal = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
 
+    // Get max sort_order for this invoice to append at end
+    const { data: existing } = await supabase
+      .from('invoice_line_items')
+      .select('sort_order')
+      .eq('invoice_id', invoiceId)
+      .order('sort_order', { ascending: false })
+      .limit(1);
+    const nextOrder = existing && existing.length > 0 ? (existing[0].sort_order ?? 0) + 1 : 0;
+
     const { data: created, error: insertError } = await supabase
       .from('invoice_line_items')
       .insert({
@@ -417,6 +433,7 @@ export async function addLineItem(
         quantity: item.quantity,
         unit_price: item.unit_price,
         total: lineTotal,
+        sort_order: nextOrder,
       })
       .select('*')
       .single();
@@ -679,5 +696,31 @@ export async function recordPayment(
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error recording payment';
     return { data: null, error: message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reorder line items (drag-and-drop)
+// ---------------------------------------------------------------------------
+
+export async function reorderLineItems(
+  orderedIds: string[]
+): Promise<{ error: string | null }> {
+  try {
+    const updates = orderedIds.map((id, index) =>
+      supabase
+        .from('invoice_line_items')
+        .update({ sort_order: index })
+        .eq('id', id)
+    );
+    const results = await Promise.all(updates);
+    const failed = results.find((r) => r.error);
+    if (failed?.error) {
+      return { error: failed.error.message };
+    }
+    return { error: null };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error reordering';
+    return { error: message };
   }
 }

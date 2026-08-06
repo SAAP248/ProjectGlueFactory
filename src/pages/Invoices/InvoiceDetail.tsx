@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ArrowLeft,
   Building2,
@@ -13,6 +13,8 @@ import {
   X,
   Check,
   FileText,
+  GripVertical,
+  Package,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
@@ -21,6 +23,7 @@ import {
   updateLineItem,
   deleteLineItem,
   deleteInvoice,
+  reorderLineItems,
 } from './useInvoices';
 import type { InvoiceLineItem } from './useInvoices';
 import InvoiceActions from './InvoiceActions';
@@ -44,6 +47,7 @@ interface ProductResult {
   name: string;
   price: number;
   manufacturer: string | null;
+  image_url: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +103,30 @@ const MY_COMPANY = {
 };
 
 // ---------------------------------------------------------------------------
-// Product Search Dropdown
+// Product thumbnail helper
+// ---------------------------------------------------------------------------
+
+function ProductThumb({ url }: { url: string | null | undefined }) {
+  const [broken, setBroken] = useState(false);
+  if (!url || broken) {
+    return (
+      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-400">
+        <Package className="h-4 w-4" />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt=""
+      onError={() => setBroken(true)}
+      className="h-9 w-9 flex-shrink-0 rounded-lg border border-gray-100 object-cover bg-gray-50"
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Product Search Dropdown (enhanced)
 // ---------------------------------------------------------------------------
 
 function ProductSearch({
@@ -113,30 +140,36 @@ function ProductSearch({
   const [loading, setLoading] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (term.length < 2) {
-      setResults([]);
-      setOpen(false);
-      return;
+  const fetchProducts = useCallback(async (searchTerm: string) => {
+    setLoading(true);
+    let query = supabase
+      .from('products')
+      .select('id, sku, name, price, manufacturer, image_url')
+      .eq('is_active', true)
+      .limit(10);
+
+    if (searchTerm.length >= 2) {
+      query = query.or(
+        `name.ilike.%${searchTerm}%,sku.ilike.%${searchTerm}%,manufacturer.ilike.%${searchTerm}%`
+      );
     }
 
-    const timeout = setTimeout(async () => {
-      setLoading(true);
-      const { data } = await supabase
-        .from('products')
-        .select('id, sku, name, price, manufacturer')
-        .eq('is_active', true)
-        .ilike('name', `%${term}%`)
-        .limit(10);
-      setResults((data as ProductResult[]) || []);
-      setOpen(true);
-      setLoading(false);
-    }, 300);
+    const { data } = await query.order('name');
+    setResults((data as ProductResult[]) || []);
+    setOpen(true);
+    setLoading(false);
+  }, []);
 
-    return () => clearTimeout(timeout);
-  }, [term]);
+  useEffect(() => {
+    if (term.length >= 2) {
+      const timeout = setTimeout(() => fetchProducts(term), 300);
+      return () => clearTimeout(timeout);
+    } else {
+      setResults([]);
+      if (term.length === 0) setOpen(false);
+    }
+  }, [term, fetchProducts]);
 
-  // Close on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
@@ -158,7 +191,11 @@ function ProductSearch({
             setTerm(e.target.value);
             onSelect(null, e.target.value);
           }}
-          placeholder="Search products or type description…"
+          onFocus={() => {
+            if (results.length > 0) setOpen(true);
+            else if (term.length === 0) fetchProducts('');
+          }}
+          placeholder="Search products or type description..."
           className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
         {loading && (
@@ -169,7 +206,7 @@ function ProductSearch({
       </div>
 
       {open && results.length > 0 && (
-        <div className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+        <div className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-gray-200 bg-white shadow-xl">
           {results.map((p) => (
             <button
               key={p.id}
@@ -179,15 +216,18 @@ function ProductSearch({
                 setTerm(p.name);
                 setOpen(false);
               }}
-              className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-gray-50"
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-blue-50 transition-colors"
             >
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">{p.name}</p>
-                {p.sku && (
-                  <p className="text-xs text-gray-500">SKU: {p.sku}</p>
-                )}
+              <ProductThumb url={p.image_url} />
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-gray-900 truncate">{p.name}</p>
+                <p className="text-xs text-gray-500 truncate">
+                  {[p.manufacturer, p.sku ? `SKU: ${p.sku}` : null]
+                    .filter(Boolean)
+                    .join(' · ') || 'No SKU'}
+                </p>
               </div>
-              <span className="text-sm font-medium text-gray-600">
+              <span className="flex-shrink-0 text-sm font-semibold text-gray-700">
                 {fmt.format(p.price)}
               </span>
             </button>
@@ -219,8 +259,17 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
   const [newPrice, setNewPrice] = useState('');
   const [newProductId, setNewProductId] = useState<string | null>(null);
 
-  // Saving/deleting states
+  // Saving states
   const [saving, setSaving] = useState(false);
+
+  // Drag-and-drop state
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [localItems, setLocalItems] = useState<InvoiceLineItem[]>([]);
+
+  useEffect(() => {
+    setLocalItems(lineItems);
+  }, [lineItems]);
 
   // -----------------------------------------------------------------------
   // Handlers
@@ -301,6 +350,47 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
   }
 
   // -----------------------------------------------------------------------
+  // Drag-and-drop handlers
+  // -----------------------------------------------------------------------
+
+  function handleDragStart(index: number) {
+    setDragIndex(index);
+  }
+
+  function handleDragOver(e: React.DragEvent, index: number) {
+    e.preventDefault();
+    if (dragIndex === null || dragIndex === index) return;
+    setDragOverIndex(index);
+  }
+
+  function handleDragLeave() {
+    setDragOverIndex(null);
+  }
+
+  async function handleDrop(dropIndex: number) {
+    if (dragIndex === null || dragIndex === dropIndex) {
+      setDragIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    const reordered = [...localItems];
+    const [moved] = reordered.splice(dragIndex, 1);
+    reordered.splice(dropIndex, 0, moved);
+    setLocalItems(reordered);
+    setDragIndex(null);
+    setDragOverIndex(null);
+
+    const ids = reordered.map((item) => item.id);
+    await reorderLineItems(ids);
+  }
+
+  function handleDragEnd() {
+    setDragIndex(null);
+    setDragOverIndex(null);
+  }
+
+  // -----------------------------------------------------------------------
   // Loading / Error states
   // -----------------------------------------------------------------------
 
@@ -323,7 +413,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
           onClick={onBack}
           className="mt-4 text-sm font-medium text-blue-600 hover:text-blue-700"
         >
-          ← Back to Invoices
+          &larr; Back to Invoices
         </button>
       </div>
     );
@@ -347,7 +437,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-12">
-      {/* ─── Header Bar ─────────────────────────────────────────────── */}
+      {/* --- Header Bar --- */}
       <div className="flex flex-wrap items-center gap-4">
         <button
           onClick={onBack}
@@ -381,7 +471,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
         </div>
       </div>
 
-      {/* ─── Actions Toolbar ──────────────────────────────────────── */}
+      {/* --- Actions Toolbar --- */}
       <InvoiceActions
         invoice={{
           id: invoice.id,
@@ -403,7 +493,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
         }}
       />
 
-      {/* ─── Info Cards Row ─────────────────────────────────────────── */}
+      {/* --- Info Cards Row --- */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {/* Customer Card */}
         <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
@@ -416,12 +506,8 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
           {company ? (
             <div className="space-y-1 text-sm">
               <p className="font-semibold text-gray-900">{company.name}</p>
-              {company.email && (
-                <p className="text-gray-600">{company.email}</p>
-              )}
-              {company.phone && (
-                <p className="text-gray-600">{company.phone}</p>
-              )}
+              {company.email && <p className="text-gray-600">{company.email}</p>}
+              {company.phone && <p className="text-gray-600">{company.phone}</p>}
               {(company.billing_address ||
                 company.billing_city ||
                 company.billing_state ||
@@ -456,12 +542,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
               </p>
               {(site.address || site.city || site.state || site.zip) && (
                 <p className="text-gray-600">
-                  {fullAddress([
-                    site.address,
-                    site.city,
-                    site.state,
-                    site.zip,
-                  ])}
+                  {fullAddress([site.address, site.city, site.state, site.zip])}
                 </p>
               )}
             </div>
@@ -490,7 +571,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
         </div>
       </div>
 
-      {/* ─── HTML-Rendered Invoice Body ─────────────────────────────── */}
+      {/* --- HTML-Rendered Invoice Body --- */}
       <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
         {/* Branding Header */}
         <div className="border-b border-gray-100 px-8 py-6">
@@ -501,7 +582,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
         </div>
 
         <div className="px-8 py-6">
-          {/* Invoice meta + Bill To / Service Location */}
+          {/* Invoice meta */}
           <div className="mb-8 flex flex-wrap justify-between gap-6">
             <div className="space-y-1 text-sm">
               <p className="font-semibold text-gray-900">
@@ -518,8 +599,8 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
             </div>
           </div>
 
+          {/* Bill To / Service Location */}
           <div className="mb-8 grid gap-6 sm:grid-cols-2">
-            {/* Bill To */}
             <div>
               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
                 Bill To
@@ -543,11 +624,10 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
                   {company.phone && <p>{company.phone}</p>}
                 </div>
               ) : (
-                <p className="text-sm text-gray-400">—</p>
+                <p className="text-sm text-gray-400">&mdash;</p>
               )}
             </div>
 
-            {/* Service Location */}
             <div>
               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
                 Service Location
@@ -557,9 +637,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
                   <p className="font-medium">{site.name || 'Unnamed Site'}</p>
                   {site.address && <p>{site.address}</p>}
                   {(site.city || site.state || site.zip) && (
-                    <p>
-                      {fullAddress([site.city, site.state, site.zip])}
-                    </p>
+                    <p>{fullAddress([site.city, site.state, site.zip])}</p>
                   )}
                 </div>
               ) : (
@@ -568,11 +646,12 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
             </div>
           </div>
 
-          {/* ─── Line Items Table ────────────────────────────────────── */}
+          {/* --- Line Items Table --- */}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 text-left">
+                  <th className="w-8 pb-2" />
                   <th className="pb-2 pr-4 font-semibold text-gray-600">
                     Description
                   </th>
@@ -589,10 +668,11 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {lineItems.map((item) =>
+                {localItems.map((item, index) =>
                   editingLineItem === item.id ? (
-                    /* ── Inline Edit Row ─────────────────────────── */
+                    /* -- Inline Edit Row -- */
                     <tr key={item.id} className="border-b border-gray-100">
+                      <td className="py-2" />
                       <td className="py-2 pr-4">
                         <input
                           type="text"
@@ -647,13 +727,37 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
                       </td>
                     </tr>
                   ) : (
-                    /* ── Display Row ─────────────────────────────── */
+                    /* -- Display Row (draggable) -- */
                     <tr
                       key={item.id}
-                      className="group border-b border-gray-100 hover:bg-gray-50/50"
+                      draggable
+                      onDragStart={() => handleDragStart(index)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={() => handleDrop(index)}
+                      onDragEnd={handleDragEnd}
+                      className={`group border-b transition-colors ${
+                        dragIndex === index
+                          ? 'opacity-40 border-gray-100'
+                          : dragOverIndex === index
+                          ? 'border-t-2 border-t-blue-400 border-b-gray-100'
+                          : 'border-gray-100 hover:bg-gray-50/50'
+                      }`}
                     >
-                      <td className="py-2.5 pr-4 text-gray-800">
-                        {item.description || '—'}
+                      <td className="py-2.5 pl-1">
+                        <div className="cursor-grab text-gray-300 hover:text-gray-500 active:cursor-grabbing">
+                          <GripVertical className="h-4 w-4" />
+                        </div>
+                      </td>
+                      <td className="py-2.5 pr-4">
+                        <div className="flex items-center gap-3">
+                          {item.product_id && (
+                            <ProductThumb url={item.product_image_url} />
+                          )}
+                          <span className="text-gray-800">
+                            {item.description || '—'}
+                          </span>
+                        </div>
                       </td>
                       <td className="py-2.5 pr-4 text-right text-gray-700">
                         {item.quantity}
@@ -686,9 +790,10 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
                   )
                 )}
 
-                {/* ── Add Line Item Row ──────────────────────────── */}
+                {/* -- Add Line Item Row -- */}
                 {addingLineItem && (
                   <tr className="border-b border-gray-100 bg-blue-50/30">
+                    <td className="py-2" />
                     <td className="py-2 pr-4">
                       <ProductSearch
                         onSelect={(product, term) => {
@@ -770,7 +875,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
             </button>
           )}
 
-          {/* ─── Totals ─────────────────────────────────────────────── */}
+          {/* --- Totals --- */}
           <div className="ml-auto mt-6 w-72 space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-600">Subtotal</span>
@@ -788,7 +893,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
                     : ''}
                 </span>
                 <span className="font-medium text-red-600">
-                  −{fmt.format(discountAmount)}
+                  &minus;{fmt.format(discountAmount)}
                 </span>
               </div>
             )}
@@ -822,7 +927,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
             </div>
           </div>
 
-          {/* ─── Notes ──────────────────────────────────────────────── */}
+          {/* --- Notes --- */}
           {invoice.notes && (
             <div className="mt-8 border-t border-gray-100 pt-6">
               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
@@ -834,7 +939,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
             </div>
           )}
 
-          {/* ─── Terms ──────────────────────────────────────────────── */}
+          {/* --- Terms --- */}
           {invoice.terms && (
             <div className="mt-6 border-t border-gray-100 pt-6">
               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
