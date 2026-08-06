@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Shield, CreditCard, Building2, Download, CheckCircle2,
   FileText, Calendar, Clock, AlertTriangle, Printer, Lock,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, RefreshCw,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -14,11 +14,17 @@ interface InvoiceData {
 
 type PaymentMethod = 'card' | 'ach';
 
-function formatCurrency(v: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v);
+function toNum(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
-function formatDate(dateStr: string) {
+function formatCurrency(v: unknown) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(toNum(v));
+}
+
+function formatDate(dateStr: string | null | undefined) {
+  if (!dateStr) return '--';
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
     month: 'long', day: 'numeric', year: 'numeric',
   });
@@ -43,6 +49,7 @@ export default function PublicPayment({ token }: { token: string }) {
   const [paid, setPaid] = useState(false);
   const [confirmationNumber, setConfirmationNumber] = useState('');
   const [detailsExpanded, setDetailsExpanded] = useState(true);
+  const [saveMethod, setSaveMethod] = useState(false);
 
   // Card fields
   const [cardName, setCardName] = useState('');
@@ -63,9 +70,11 @@ export default function PublicPayment({ token }: { token: string }) {
 
   async function fetchInvoice() {
     setLoading(true);
+    setError('');
+
     const { data: invoice, error: invErr } = await supabase
       .from('invoices')
-      .select('*, companies(id, name, phone, email, billing_address, billing_city, billing_state, billing_zip)')
+      .select('*')
       .eq('payment_token', token)
       .maybeSingle();
 
@@ -75,18 +84,28 @@ export default function PublicPayment({ token }: { token: string }) {
       return;
     }
 
+    let company: any = null;
+    if (invoice.company_id) {
+      const { data: companyData } = await supabase
+        .from('companies')
+        .select('id, name, phone, email, billing_address, billing_city, billing_state, billing_zip')
+        .eq('id', invoice.company_id)
+        .maybeSingle();
+      company = companyData;
+    }
+
     const { data: lineItems } = await supabase
       .from('invoice_line_items')
       .select('*')
       .eq('invoice_id', invoice.id)
-      .order('created_at');
+      .order('sort_order', { ascending: true });
 
     setData({
       invoice,
-      company: invoice.companies,
+      company,
       lineItems: lineItems || [],
     });
-    setPayAmount(parseFloat(invoice.balance_due).toFixed(2));
+    setPayAmount(toNum(invoice.balance_due).toFixed(2));
     setLoading(false);
   }
 
@@ -126,7 +145,6 @@ export default function PublicPayment({ token }: { token: string }) {
       && achAccount.replace(/\D/g, '').length >= 4;
   }
 
-  // --- Loading ---
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -138,7 +156,6 @@ export default function PublicPayment({ token }: { token: string }) {
     );
   }
 
-  // --- Error ---
   if (error || !data) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
@@ -153,10 +170,9 @@ export default function PublicPayment({ token }: { token: string }) {
 
   const { invoice, company, lineItems } = data;
   const status = STATUS_STYLES[invoice.status] || STATUS_STYLES.sent;
-  const balanceDue = parseFloat(invoice.balance_due);
+  const balanceDue = toNum(invoice.balance_due);
   const isPaid = invoice.status === 'paid' || balanceDue <= 0;
 
-  // --- Success ---
   if (paid) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
@@ -174,7 +190,7 @@ export default function PublicPayment({ token }: { token: string }) {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Amount Paid</span>
-              <span className="font-semibold text-gray-900">{formatCurrency(parseFloat(payAmount))}</span>
+              <span className="font-semibold text-gray-900">{formatCurrency(payAmount)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Invoice</span>
@@ -194,6 +210,21 @@ export default function PublicPayment({ token }: { token: string }) {
               <span className="font-semibold text-gray-900">{new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
             </div>
           </div>
+
+          {saveMethod && (
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6 flex items-start gap-3 text-left">
+              <RefreshCw className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-blue-900">Payment Method Saved</p>
+                <p className="text-xs text-blue-700 mt-0.5">
+                  Your {paymentMethod === 'card'
+                    ? `card ending in ${cardNumber.replace(/\s/g, '').slice(-4)}`
+                    : `bank account ending in ${achAccount.slice(-4)}`
+                  } has been saved for automatic subscription payments.
+                </p>
+              </div>
+            </div>
+          )}
 
           <button
             onClick={() => window.print()}
@@ -273,7 +304,7 @@ export default function PublicPayment({ token }: { token: string }) {
               </div>
               <div>
                 <p className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-0.5">Invoice Total</p>
-                <p className="text-gray-800 font-medium">{formatCurrency(parseFloat(invoice.total))}</p>
+                <p className="text-gray-800 font-medium">{formatCurrency(invoice.total)}</p>
               </div>
             </div>
           </div>
@@ -317,9 +348,9 @@ export default function PublicPayment({ token }: { token: string }) {
                       {lineItems.map((item: any) => (
                         <tr key={item.id}>
                           <td className="px-6 sm:px-8 py-3.5 text-gray-800 font-medium">{item.description}</td>
-                          <td className="px-4 py-3.5 text-right text-gray-600">{parseFloat(item.quantity)}</td>
-                          <td className="px-4 py-3.5 text-right text-gray-600">{formatCurrency(parseFloat(item.unit_price))}</td>
-                          <td className="px-6 sm:px-8 py-3.5 text-right font-semibold text-gray-900">{formatCurrency(parseFloat(item.total))}</td>
+                          <td className="px-4 py-3.5 text-right text-gray-600">{toNum(item.quantity)}</td>
+                          <td className="px-4 py-3.5 text-right text-gray-600">{formatCurrency(item.unit_price)}</td>
+                          <td className="px-6 sm:px-8 py-3.5 text-right font-semibold text-gray-900">{formatCurrency(item.total)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -334,22 +365,22 @@ export default function PublicPayment({ token }: { token: string }) {
                 <div className="max-w-xs ml-auto space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Subtotal</span>
-                    <span className="text-gray-800">{formatCurrency(parseFloat(invoice.subtotal))}</span>
+                    <span className="text-gray-800">{formatCurrency(invoice.subtotal)}</span>
                   </div>
-                  {parseFloat(invoice.tax) > 0 && (
+                  {toNum(invoice.tax) > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Tax</span>
-                      <span className="text-gray-800">{formatCurrency(parseFloat(invoice.tax))}</span>
+                      <span className="text-gray-800">{formatCurrency(invoice.tax)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-sm font-semibold pt-2 border-t border-gray-100">
                     <span className="text-gray-700">Total</span>
-                    <span className="text-gray-900">{formatCurrency(parseFloat(invoice.total))}</span>
+                    <span className="text-gray-900">{formatCurrency(invoice.total)}</span>
                   </div>
-                  {parseFloat(invoice.amount_paid) > 0 && (
+                  {toNum(invoice.amount_paid) > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Payments Received</span>
-                      <span className="text-emerald-600 font-medium">-{formatCurrency(parseFloat(invoice.amount_paid))}</span>
+                      <span className="text-emerald-600 font-medium">-{formatCurrency(invoice.amount_paid)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200">
@@ -541,6 +572,33 @@ export default function PublicPayment({ token }: { token: string }) {
                   </div>
                 </div>
               )}
+
+              {/* Save payment method toggle */}
+              <div className="pb-5">
+                <label className="flex items-start gap-3 cursor-pointer group">
+                  <div className="relative mt-0.5 flex-shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={saveMethod}
+                      onChange={e => setSaveMethod(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-5 h-5 rounded border-2 border-gray-300 peer-checked:border-blue-600 peer-checked:bg-blue-600 transition-colors flex items-center justify-center group-hover:border-gray-400 peer-checked:group-hover:border-blue-700">
+                      {saveMethod && (
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-sm font-semibold text-gray-800">Save this payment method</span>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Keep this {paymentMethod === 'card' ? 'card' : 'bank account'} on file for automatic subscription and recurring payments.
+                    </p>
+                  </div>
+                </label>
+              </div>
             </div>
 
             {/* Pay button */}
@@ -558,7 +616,7 @@ export default function PublicPayment({ token }: { token: string }) {
                 ) : (
                   <>
                     <Lock className="h-4 w-4" />
-                    Pay {payAmount ? formatCurrency(parseFloat(payAmount)) : ''}
+                    Pay {payAmount ? formatCurrency(payAmount) : ''}
                   </>
                 )}
               </button>
