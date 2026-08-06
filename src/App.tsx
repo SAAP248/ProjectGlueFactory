@@ -23,7 +23,7 @@ import Products from './pages/Inventory/Products';
 import Packages from './pages/Inventory/Packages';
 import SiteInventory from './pages/Inventory/SiteInventory';
 import Estimates from './pages/Accounting/Estimates';
-import Invoices from './pages/Accounting/Invoices';
+import Invoices from './pages/Invoices/index';
 import Statements from './pages/Accounting/Statements';
 import Transactions from './pages/Accounting/Transactions';
 import TimeAttendance from './pages/TimeAttendance';
