@@ -198,28 +198,34 @@ export default function NewInvoiceSlideOver({ open, onClose, onCreated }: Props)
   // ====================================================================
   // Product search debounce
   // ====================================================================
+  const fetchProductResults = useCallback(async (term: string) => {
+    setProductLoading(true);
+    let query = supabase
+      .from('products')
+      .select('id, name, price, sku, manufacturer, image_url')
+      .eq('is_active', true)
+      .limit(10);
+
+    if (term.trim().length >= 2) {
+      query = query.or(
+        `name.ilike.%${term.trim()}%,sku.ilike.%${term.trim()}%,manufacturer.ilike.%${term.trim()}%`
+      );
+    }
+
+    const { data } = await query.order('name');
+    setProductResults((data ?? []) as ProductOption[]);
+    setProductLoading(false);
+  }, []);
+
   useEffect(() => {
-    if (!productSearch.trim()) {
+    if (activeProductRow === null) {
       setProductResults([]);
       return;
     }
 
-    const timeout = setTimeout(async () => {
-      setProductLoading(true);
-      const { data } = await supabase
-        .from('products')
-        .select('id, name, price, sku, manufacturer, image_url')
-        .eq('is_active', true)
-        .or(`name.ilike.%${productSearch.trim()}%,sku.ilike.%${productSearch.trim()}%,manufacturer.ilike.%${productSearch.trim()}%`)
-        .order('name')
-        .limit(10);
-
-      setProductResults((data ?? []) as ProductOption[]);
-      setProductLoading(false);
-    }, 300);
-
+    const timeout = setTimeout(() => fetchProductResults(productSearch), 300);
     return () => clearTimeout(timeout);
-  }, [productSearch]);
+  }, [productSearch, activeProductRow, fetchProductResults]);
 
   // ====================================================================
   // Click-outside handlers
