@@ -13,6 +13,7 @@ import AccountingTab from './AccountingTab';
 import WorkOrdersTab from './WorkOrdersTab';
 import ContactsTab from './ContactsTab';
 import CommunicationsTab from './CommunicationsTab';
+import DealsTab from './DealsTab';
 import PhotoGallery from '../Photos/PhotoGallery';
 import DocumentGallery from '../Documents/DocumentGallery';
 
@@ -74,6 +75,7 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer }: 
 
   const TABS = [
     { id: 'overview', label: 'Overview' },
+    { id: 'deals', label: 'Deals' },
     { id: 'sites-systems', label: 'Sites & Systems' },
     { id: 'accounting', label: 'Accounting' },
     { id: 'work-orders', label: 'Work Orders' },
@@ -557,6 +559,9 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer }: 
             sitesCount={sites.length}
             onNavigate={setActiveTab}
           />
+        )}
+        {activeTab === 'deals' && (
+          <DealsTab companyId={company.id} />
         )}
         {activeTab === 'sites-systems' && (
           <SitesSystemsTab
