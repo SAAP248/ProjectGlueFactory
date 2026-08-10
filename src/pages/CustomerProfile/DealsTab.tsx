@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
-import { TrendingUp, DollarSign, Repeat, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { TrendingUp, DollarSign, Repeat, Calendar, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import DealSlideOver from '../Deals/DealSlideOver';
+import type { Deal as FullDeal, Employee } from '../Deals/types';
 
-interface Deal {
+interface DealRow {
   id: string;
   title: string;
   value: number;
@@ -46,13 +48,17 @@ function formatDate(d: string | null | undefined) {
 type SortKey = 'title' | 'sales_stage' | 'value' | 'rmr' | 'created_at';
 
 export default function DealsTab({ companyId }: Props) {
-  const [deals, setDeals] = useState<Deal[]>([]);
+  const [deals, setDeals] = useState<DealRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
   const [sortAsc, setSortAsc] = useState(false);
 
+  const [selectedDeal, setSelectedDeal] = useState<FullDeal | null>(null);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+
   useEffect(() => {
     loadDeals();
+    loadEmployees();
   }, [companyId]);
 
   async function loadDeals() {
@@ -96,6 +102,40 @@ export default function DealsTab({ companyId }: Props) {
       systemTypes: systemsByDeal.get(d.id) || [],
     })));
     setLoading(false);
+  }
+
+  async function loadEmployees() {
+    const { data } = await supabase
+      .from('employees')
+      .select('id, first_name, last_name, role')
+      .order('first_name');
+    if (data) setEmployees(data as Employee[]);
+  }
+
+  async function openDeal(dealId: string) {
+    const { data } = await supabase
+      .from('deals')
+      .select('*, companies(name), assigned_employee:employees!deals_assigned_employee_id_fkey(first_name, last_name)')
+      .eq('id', dealId)
+      .maybeSingle();
+    if (data) setSelectedDeal(data as unknown as FullDeal);
+  }
+
+  const handleUpdateDeal = useCallback(async (dealId: string, updates: Partial<FullDeal>) => {
+    const { error } = await supabase.from('deals').update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    }).eq('id', dealId);
+    if (!error) {
+      setSelectedDeal(prev => prev ? { ...prev, ...updates } : prev);
+      loadDeals();
+    }
+    return !error;
+  }, [companyId]);
+
+  function handleCloseSlideOver() {
+    setSelectedDeal(null);
+    loadDeals();
   }
 
   function handleSort(key: SortKey) {
@@ -225,15 +265,24 @@ export default function DealsTab({ companyId }: Props) {
                 {sorted.map(deal => {
                   const ss = stageStyle(deal.sales_stage);
                   return (
-                    <tr key={deal.id} className="hover:bg-gray-50 transition-colors">
+                    <tr
+                      key={deal.id}
+                      onClick={() => openDeal(deal.id)}
+                      className="hover:bg-blue-50/50 transition-colors cursor-pointer group"
+                    >
                       <td className="px-5 py-3.5">
-                        <p className="font-semibold text-gray-900 truncate max-w-[260px]">{deal.title}</p>
-                        {deal.expected_close_date && (
-                          <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
-                            <Calendar className="h-3 w-3" />
-                            Close {formatDate(deal.expected_close_date)}
-                          </p>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-gray-900 truncate max-w-[260px] group-hover:text-blue-700 transition-colors">{deal.title}</p>
+                            {deal.expected_close_date && (
+                              <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                                <Calendar className="h-3 w-3" />
+                                Close {formatDate(deal.expected_close_date)}
+                              </p>
+                            )}
+                          </div>
+                          <ExternalLink className="h-3.5 w-3.5 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                        </div>
                       </td>
                       <td className="px-4 py-3.5">
                         {deal.systemTypes.length > 0 ? (
@@ -280,6 +329,15 @@ export default function DealsTab({ companyId }: Props) {
             </table>
           </div>
         </div>
+      )}
+
+      {selectedDeal && (
+        <DealSlideOver
+          deal={selectedDeal}
+          employees={employees}
+          onClose={handleCloseSlideOver}
+          onUpdate={handleUpdateDeal}
+        />
       )}
     </div>
   );
