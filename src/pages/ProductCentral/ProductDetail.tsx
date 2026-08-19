@@ -1,9 +1,5 @@
 import { useState, useEffect } from 'react';
-import {
-  ArrowLeft, Package, ExternalLink, Camera, FileText,
-  MessageSquare, Download, CheckCircle, Trash2, Send, AlertTriangle,
-  Plus, Edit2, X, Clock, DollarSign, Wrench, Tag,
-} from 'lucide-react';
+import { ArrowLeft, Package, ExternalLink, Camera, FileText, MessageSquare, Download, CheckCircle, Trash2, Send, AlertTriangle, Plus, CreditCard as Edit2, X, Clock, DollarSign, Wrench, Tag } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { containsProfanity } from '../../lib/profanityFilter';
 import { useRole } from '../../contexts/RoleContext';
@@ -626,6 +622,3 @@ function NotesSection({ notes, newNote, setNewNote, authorName, setAuthorName, s
     </div>
   );
 }
-
-
-export default ProductDetail
