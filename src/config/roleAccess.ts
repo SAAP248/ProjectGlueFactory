@@ -33,6 +33,7 @@ const ALL_NAV = [
   'settings',
   'technician-portal',
   'customer-portal',
+  'product-central',
 ];
 
 export const ROLE_PAGES: Record<Role, string[]> = {
@@ -50,6 +51,7 @@ export const ROLE_PAGES: Record<Role, string[]> = {
     'settings',
     'documents',
     'user-management',
+    'product-central',
   ],
 
   sales_manager: [
@@ -66,6 +68,7 @@ export const ROLE_PAGES: Record<Role, string[]> = {
     'estimates',
     'reports',
     'projects',
+    'product-central',
   ],
 
   sales: [
@@ -79,6 +82,7 @@ export const ROLE_PAGES: Record<Role, string[]> = {
     'documents',
     'photos',
     'estimates',
+    'product-central',
   ],
 
   csr: [
@@ -94,6 +98,7 @@ export const ROLE_PAGES: Record<Role, string[]> = {
     'team-chat',
     'alarm-dashboard',
     'documents',
+    'product-central',
   ],
 
   dispatcher: [
@@ -109,6 +114,7 @@ export const ROLE_PAGES: Record<Role, string[]> = {
     'technician-portal',
     'alarm-dashboard',
     'time-attendance',
+    'product-central',
   ],
 
   tech_manager: [
@@ -129,6 +135,7 @@ export const ROLE_PAGES: Record<Role, string[]> = {
     'warehouses',
     'purchase-orders',
     'tickets',
+    'product-central',
   ],
 
   tech: [
@@ -139,6 +146,7 @@ export const ROLE_PAGES: Record<Role, string[]> = {
     'chat',
     'products',
     'packages',
+    'product-central',
   ],
 
   limited_tech: [
@@ -147,6 +155,7 @@ export const ROLE_PAGES: Record<Role, string[]> = {
     'calendar',
     'time-attendance',
     'chat',
+    'product-central',
   ],
 };
 

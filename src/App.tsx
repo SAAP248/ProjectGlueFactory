@@ -31,6 +31,7 @@ import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import TechnicianPortal from './pages/TechnicianPortal';
 import CustomerPortal from './pages/CustomerPortal';
+import ProductCentral from './pages/ProductCentral';
 import Tickets from './pages/Tickets/index';
 import Leads from './pages/Leads/index';
 import PhotosPage from './pages/Photos/index';
@@ -130,6 +131,8 @@ function App() {
         return <TechnicianPortal />;
       case 'customer-portal':
         return <CustomerPortal />;
+      case 'product-central':
+        return <ProductCentral />;
       case 'photos':
         return <PhotosPage />;
       case 'documents':

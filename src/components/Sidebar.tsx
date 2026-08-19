@@ -31,6 +31,7 @@ import {
   FileText,
   Hash,
   UserCog,
+  ShoppingBag,
 } from 'lucide-react';
 import { useRole } from '../contexts/RoleContext';
 import { canAccessPage } from '../config/roleAccess';
@@ -85,6 +86,7 @@ const bottomNavItems = [
 const portalItems = [
   { id: 'technician-portal', label: 'Tech Portal', icon: Smartphone },
   { id: 'customer-portal', label: 'Customer Portal', icon: Globe },
+  { id: 'product-central', label: 'Product Central', icon: ShoppingBag },
 ];
 
 function formatElapsed(seconds: number) {
