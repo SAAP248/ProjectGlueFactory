@@ -21,7 +21,7 @@ export default function ProductCentral() {
     setLoading(true);
     const { data } = await supabase
       .from('products')
-      .select('id, sku, name, description, long_description, category, manufacturer, model_number, price, msrp, cost, image_url, product_url, is_active')
+      .select('*')
       .eq('is_active', true)
       .order('manufacturer')
       .order('name');
