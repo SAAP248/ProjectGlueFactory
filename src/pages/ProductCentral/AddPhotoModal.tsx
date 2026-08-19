@@ -25,7 +25,15 @@ export default function AddPhotoModal({ productId, onClose, onAdded }: Props) {
       .select()
       .maybeSingle();
     if (err) { setError('Failed to save photo. Please try again.'); setSaving(false); return; }
-    if (data) onAdded(data as PCPhoto);
+    if (data) {
+      // Auto-set product image_url if it's currently empty
+      await supabase
+        .from('products')
+        .update({ image_url: url.trim() })
+        .eq('id', productId)
+        .is('image_url', null);
+      onAdded(data as PCPhoto);
+    }
   }
 
   return (

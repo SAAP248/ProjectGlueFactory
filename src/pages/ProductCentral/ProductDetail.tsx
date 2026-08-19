@@ -167,8 +167,8 @@ export default function ProductDetail({ productId, onBack }: Props) {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
           <div className="bg-gray-50 flex items-center justify-center p-8 min-h-[320px] border-b lg:border-b-0 lg:border-r border-gray-200">
-            {product.image_url ? (
-              <img src={product.image_url} alt={product.name} className="max-h-[320px] w-auto object-contain" />
+            {(product.image_url || photos[0]?.url) ? (
+              <img src={product.image_url || photos[0].url} alt={product.name} className="max-h-[320px] w-auto object-contain" />
             ) : (
               <Package className="h-24 w-24 text-gray-200" />
             )}

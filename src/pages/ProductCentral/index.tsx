@@ -21,11 +21,16 @@ export default function ProductCentral() {
     setLoading(true);
     const { data } = await supabase
       .from('products')
-      .select('*')
+      .select('*, product_central_photos(url)')
       .eq('is_active', true)
       .order('manufacturer')
       .order('name');
-    setProducts((data ?? []) as PCProduct[]);
+    const withThumbnail = (data ?? []).map((p: any) => ({
+      ...p,
+      image_url: p.image_url || p.product_central_photos?.[0]?.url || null,
+      product_central_photos: undefined,
+    }));
+    setProducts(withThumbnail as PCProduct[]);
     setLoading(false);
   }
 
