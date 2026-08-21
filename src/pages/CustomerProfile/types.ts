@@ -142,6 +142,7 @@ export interface AlarmEmergencyContact {
   has_key: boolean;
   access_level: string;
   relation: string;
+  call_section: 'before_dispatch' | 'after_dispatch';
 }
 
 export interface AlarmCodeWord {
