@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Plus, Pencil, Trash2, X, Check, CheckCircle2, XCircle, GripVertical, Phone, Shield, ShieldAlert } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Check, GripVertical, Phone, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { AlarmEmergencyContact } from '../CustomerProfile/types';
 
@@ -77,7 +77,7 @@ function ContactModal({ contact: initial, onClose, onSave }: ContactModalProps) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
           <h2 className="text-lg font-semibold text-gray-900">{initial.id ? 'Edit Contact' : 'Add Emergency Contact'}</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -119,10 +119,10 @@ function ContactModal({ contact: initial, onClose, onSave }: ContactModalProps) 
               </select>
             </div>
             <div>
-              <label className={labelCls}>Section</label>
+              <label className={labelCls}>Call Timing</label>
               <select className={inputCls} value={form.call_section || 'before_dispatch'} onChange={e => set('call_section', e.target.value)}>
-                <option value="before_dispatch">Call Before Dispatch</option>
-                <option value="after_dispatch">Call After Dispatch</option>
+                <option value="before_dispatch">Before Dispatch</option>
+                <option value="after_dispatch">After Dispatch</option>
               </select>
             </div>
           </div>
@@ -155,93 +155,12 @@ function ContactModal({ contact: initial, onClose, onSave }: ContactModalProps) 
   );
 }
 
-interface ContactCardProps {
-  contact: AlarmEmergencyContact;
-  index: number;
-  onEdit: () => void;
-  onDelete: () => void;
-  deleting: boolean;
-  onDragStart: (e: React.DragEvent, id: string) => void;
-  onDragOver: (e: React.DragEvent) => void;
-  onDrop: (e: React.DragEvent, targetId: string) => void;
-  isDragTarget: boolean;
-}
-
-function ContactCard({ contact, index, onEdit, onDelete, deleting, onDragStart, onDragOver, onDrop, isDragTarget }: ContactCardProps) {
-  return (
-    <div
-      draggable
-      onDragStart={e => onDragStart(e, contact.id)}
-      onDragOver={onDragOver}
-      onDrop={e => onDrop(e, contact.id)}
-      className={`
-        group relative flex items-center gap-3 p-4 rounded-xl border transition-all cursor-grab active:cursor-grabbing
-        ${isDragTarget ? 'border-blue-400 bg-blue-50 shadow-md' : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'}
-      `}
-    >
-      <div className="flex-shrink-0 text-gray-300 group-hover:text-gray-500 transition-colors">
-        <GripVertical className="h-5 w-5" />
-      </div>
-
-      <div className="flex-shrink-0">
-        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-sm font-bold">
-          {index + 1}
-        </span>
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-gray-900 truncate">
-            {contact.first_name} {contact.last_name}
-          </span>
-          {contact.relation && (
-            <span className="text-xs text-gray-400 flex-shrink-0">({contact.relation})</span>
-          )}
-        </div>
-        <div className="flex items-center gap-3 mt-1">
-          <span className="flex items-center gap-1 text-xs text-gray-600 font-mono">
-            <Phone className="h-3 w-3 text-gray-400" />
-            {displayPhone(contact.phone) || '—'}
-          </span>
-          {contact.access_level && (
-            <span className="text-xs text-gray-400">{contact.access_level}</span>
-          )}
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2 flex-shrink-0">
-        {contact.has_ecv_ctv && (
-          <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 rounded">ECV</span>
-        )}
-        {contact.has_key && (
-          <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 rounded">Key</span>
-        )}
-      </div>
-
-      <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          onClick={onEdit}
-          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </button>
-        <button
-          onClick={onDelete}
-          disabled={deleting}
-          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function EmergencyContactsTab({ systemId, contacts, onContactsChange }: Props) {
   const [modalContact, setModalContact] = useState<Partial<AlarmEmergencyContact> | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const dragItemRef = useRef<string | null>(null);
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ id: string; position: 'above' | 'below' } | null>(null);
+  const [dropOnDivider, setDropOnDivider] = useState(false);
 
   const beforeContacts = contacts
     .filter(c => (c.call_section || 'before_dispatch') === 'before_dispatch')
@@ -300,175 +219,232 @@ export default function EmergencyContactsTab({ systemId, contacts, onContactsCha
     setDeleting(null);
   };
 
+  const persistOrder = async (updated: AlarmEmergencyContact[]) => {
+    onContactsChange(updated);
+    const toUpdate = updated.filter(c => {
+      const orig = contacts.find(o => o.id === c.id);
+      return orig && (orig.contact_order !== c.contact_order || orig.call_section !== c.call_section);
+    });
+    for (const c of toUpdate) {
+      await supabase
+        .from('alarm_emergency_contacts')
+        .update({ contact_order: c.contact_order, call_section: c.call_section })
+        .eq('id', c.id);
+    }
+  };
+
   const handleDragStart = (e: React.DragEvent, id: string) => {
     dragItemRef.current = id;
     e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragEnd = () => {
+    dragItemRef.current = null;
+    setDropTarget(null);
+    setDropOnDivider(false);
+  };
+
+  const handleCardDragOver = (e: React.DragEvent, contactId: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const position = e.clientY < midY ? 'above' : 'below';
+    setDropTarget({ id: contactId, position });
+    setDropOnDivider(false);
   };
 
-  const handleDrop = async (e: React.DragEvent, targetId: string, section: CallSection) => {
+  const handleDividerDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    setDragOverId(null);
-    const draggedId = dragItemRef.current;
-    if (!draggedId || draggedId === targetId) return;
-
-    const sectionContacts = contacts
-      .filter(c => (c.call_section || 'before_dispatch') === section)
-      .sort((a, b) => a.contact_order - b.contact_order);
-
-    const draggedContact = contacts.find(c => c.id === draggedId);
-    if (!draggedContact) return;
-
-    const isMovingToNewSection = (draggedContact.call_section || 'before_dispatch') !== section;
-
-    let reordered: AlarmEmergencyContact[];
-    if (isMovingToNewSection) {
-      const targetIdx = sectionContacts.findIndex(c => c.id === targetId);
-      const updated = [...sectionContacts];
-      updated.splice(targetIdx, 0, { ...draggedContact, call_section: section });
-      reordered = updated;
-    } else {
-      const fromIdx = sectionContacts.findIndex(c => c.id === draggedId);
-      const toIdx = sectionContacts.findIndex(c => c.id === targetId);
-      const updated = [...sectionContacts];
-      const [moved] = updated.splice(fromIdx, 1);
-      updated.splice(toIdx, 0, moved);
-      reordered = updated;
-    }
-
-    const updates = reordered.map((c, i) => ({
-      ...c,
-      contact_order: i + 1,
-      call_section: section,
-    }));
-
-    const allUpdated = contacts.map(c => {
-      const found = updates.find(u => u.id === c.id);
-      if (found) return found;
-      if (c.id === draggedId && isMovingToNewSection) return null;
-      return c;
-    }).filter(Boolean) as AlarmEmergencyContact[];
-
-    if (isMovingToNewSection) {
-      const otherSection = section === 'before_dispatch' ? 'after_dispatch' : 'before_dispatch';
-      const remaining = allUpdated
-        .filter(c => (c.call_section || 'before_dispatch') === otherSection)
-        .sort((a, b) => a.contact_order - b.contact_order)
-        .map((c, i) => ({ ...c, contact_order: i + 1 }));
-      const final = [
-        ...allUpdated.filter(c => (c.call_section || 'before_dispatch') !== otherSection),
-        ...remaining,
-      ];
-      onContactsChange(final);
-      for (const u of [...updates, ...remaining]) {
-        await supabase
-          .from('alarm_emergency_contacts')
-          .update({ contact_order: u.contact_order, call_section: u.call_section })
-          .eq('id', u.id);
-      }
-    } else {
-      onContactsChange(allUpdated);
-      for (const u of updates) {
-        await supabase
-          .from('alarm_emergency_contacts')
-          .update({ contact_order: u.contact_order })
-          .eq('id', u.id);
-      }
-    }
-
-    dragItemRef.current = null;
+    e.dataTransfer.dropEffect = 'move';
+    setDropTarget(null);
+    setDropOnDivider(true);
   };
 
-  const handleDropOnSection = async (e: React.DragEvent, section: CallSection) => {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    setDragOverId(null);
     const draggedId = dragItemRef.current;
     if (!draggedId) return;
 
-    const draggedContact = contacts.find(c => c.id === draggedId);
-    if (!draggedContact) return;
+    if (dropOnDivider) {
+      // Dropped on divider: move to end of "before" section
+      const newBefore = [...beforeContacts.filter(c => c.id !== draggedId)];
+      const newAfter = [...afterContacts.filter(c => c.id !== draggedId)];
+      const dragged = contacts.find(c => c.id === draggedId);
+      if (!dragged) return;
+      newBefore.push({ ...dragged, call_section: 'before_dispatch' });
 
-    if ((draggedContact.call_section || 'before_dispatch') === section) return;
+      const finalBefore = newBefore.map((c, i) => ({ ...c, contact_order: i + 1, call_section: 'before_dispatch' as CallSection }));
+      const finalAfter = newAfter.map((c, i) => ({ ...c, contact_order: i + 1, call_section: 'after_dispatch' as CallSection }));
+      persistOrder([...finalBefore, ...finalAfter]);
+    } else if (dropTarget) {
+      const targetContact = contacts.find(c => c.id === dropTarget.id);
+      if (!targetContact) return;
+      const targetSection: CallSection = (targetContact.call_section || 'before_dispatch') as CallSection;
 
-    const sectionContacts = contacts
-      .filter(c => (c.call_section || 'before_dispatch') === section)
-      .sort((a, b) => a.contact_order - b.contact_order);
+      // Build new ordered lists
+      let newBefore = beforeContacts.filter(c => c.id !== draggedId);
+      let newAfter = afterContacts.filter(c => c.id !== draggedId);
+      const dragged = contacts.find(c => c.id === draggedId);
+      if (!dragged) return;
 
-    const newOrder = sectionContacts.length + 1;
-    const updated = contacts.map(c => {
-      if (c.id === draggedId) return { ...c, call_section: section, contact_order: newOrder };
-      return c;
-    }) as AlarmEmergencyContact[];
+      const targetList = targetSection === 'before_dispatch' ? newBefore : newAfter;
+      const targetIdx = targetList.findIndex(c => c.id === dropTarget.id);
+      const insertIdx = dropTarget.position === 'above' ? targetIdx : targetIdx + 1;
+      targetList.splice(insertIdx, 0, { ...dragged, call_section: targetSection });
 
-    const otherSection = section === 'before_dispatch' ? 'after_dispatch' : 'before_dispatch';
-    const remaining = updated
-      .filter(c => (c.call_section || 'before_dispatch') === otherSection)
-      .sort((a, b) => a.contact_order - b.contact_order)
-      .map((c, i) => ({ ...c, contact_order: i + 1 }));
+      if (targetSection === 'before_dispatch') {
+        newBefore = targetList;
+      } else {
+        newAfter = targetList;
+      }
 
-    const final = [
-      ...updated.filter(c => (c.call_section || 'before_dispatch') !== otherSection),
-      ...remaining,
-    ];
-    onContactsChange(final);
-
-    await supabase
-      .from('alarm_emergency_contacts')
-      .update({ call_section: section, contact_order: newOrder })
-      .eq('id', draggedId);
-    for (const r of remaining) {
-      await supabase
-        .from('alarm_emergency_contacts')
-        .update({ contact_order: r.contact_order })
-        .eq('id', r.id);
+      const finalBefore = newBefore.map((c, i) => ({ ...c, contact_order: i + 1, call_section: 'before_dispatch' as CallSection }));
+      const finalAfter = newAfter.map((c, i) => ({ ...c, contact_order: i + 1, call_section: 'after_dispatch' as CallSection }));
+      persistOrder([...finalBefore, ...finalAfter]);
     }
 
     dragItemRef.current = null;
+    setDropTarget(null);
+    setDropOnDivider(false);
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Before Dispatch Section */}
-      <SectionPanel
-        title="Call Before Dispatch"
-        description="These contacts are called first, before authorities are dispatched"
-        icon={<Shield className="h-5 w-5 text-blue-600" />}
-        section="before_dispatch"
-        contacts={beforeContacts}
-        onAdd={() => setModalContact(emptyContact(systemId, beforeContacts.length + 1, 'before_dispatch'))}
-        onEdit={c => setModalContact(c)}
-        onDelete={handleDelete}
-        deleting={deleting}
-        onDragStart={handleDragStart}
-        onDragOver={(e) => { handleDragOver(e); }}
-        onDrop={handleDrop}
-        onDropOnSection={handleDropOnSection}
-        dragOverId={dragOverId}
-        setDragOverId={setDragOverId}
-      />
+  const totalContacts = contacts.length;
 
-      {/* After Dispatch Section */}
-      <SectionPanel
-        title="Call After Dispatch"
-        description="These contacts are notified after authorities have been dispatched"
-        icon={<ShieldAlert className="h-5 w-5 text-amber-600" />}
-        section="after_dispatch"
-        contacts={afterContacts}
-        onAdd={() => setModalContact(emptyContact(systemId, afterContacts.length + 1, 'after_dispatch'))}
-        onEdit={c => setModalContact(c)}
-        onDelete={handleDelete}
-        deleting={deleting}
-        onDragStart={handleDragStart}
-        onDragOver={(e) => { handleDragOver(e); }}
-        onDrop={handleDrop}
-        onDropOnSection={handleDropOnSection}
-        dragOverId={dragOverId}
-        setDragOverId={setDragOverId}
-      />
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden" onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div>
+          <h3 className="text-base font-bold text-gray-900">Emergency Contact List</h3>
+          <p className="text-xs text-gray-500 mt-0.5">{totalContacts} {totalContacts === 1 ? 'contact' : 'contacts'} &middot; Drag to reorder or move between sections</p>
+        </div>
+        <button
+          onClick={() => setModalContact(emptyContact(systemId, beforeContacts.length + 1, 'before_dispatch'))}
+          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          Add Contact
+        </button>
+      </div>
+
+      {/* Unified list */}
+      <div className="px-4 py-3">
+        {/* Section label: Before Dispatch */}
+        <div className="flex items-center gap-2 px-2 py-2 mb-1">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600">Call Before Dispatch</span>
+          <span className="text-[11px] text-gray-400">({beforeContacts.length})</span>
+        </div>
+
+        {/* Before dispatch contacts */}
+        {beforeContacts.length === 0 && (
+          <div
+            className={`mx-2 mb-2 py-6 border-2 border-dashed rounded-lg text-center transition-colors ${
+              dropTarget === null && !dropOnDivider && dragItemRef.current ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200'
+            }`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDropOnDivider(true);
+              setDropTarget(null);
+            }}
+            onDrop={handleDrop}
+          >
+            <p className="text-xs text-gray-400">No contacts before dispatch. Drag here or add one.</p>
+          </div>
+        )}
+        {beforeContacts.map((contact) => (
+          <ContactRow
+            key={contact.id}
+            contact={contact}
+            onEdit={() => setModalContact(contact)}
+            onDelete={() => handleDelete(contact.id)}
+            deleting={deleting === contact.id}
+            onDragStart={handleDragStart}
+            onDragOver={handleCardDragOver}
+            onDragEnd={handleDragEnd}
+            isDropAbove={dropTarget?.id === contact.id && dropTarget.position === 'above'}
+            isDropBelow={dropTarget?.id === contact.id && dropTarget.position === 'below'}
+          />
+        ))}
+
+        {/* Dispatch Divider */}
+        <div
+          className={`relative my-3 mx-2 transition-all ${dropOnDivider ? 'py-3' : 'py-1'}`}
+          onDragOver={handleDividerDragOver}
+          onDragLeave={() => setDropOnDivider(false)}
+          onDrop={handleDrop}
+        >
+          <div className={`flex items-center gap-3 transition-all ${dropOnDivider ? 'scale-[1.02]' : ''}`}>
+            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-amber-300 to-amber-300" />
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-colors ${
+              dropOnDivider
+                ? 'border-amber-400 bg-amber-100 shadow-sm'
+                : 'border-amber-200 bg-amber-50'
+            }`}>
+              <AlertTriangle className="h-3 w-3 text-amber-600" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Dispatch</span>
+            </div>
+            <div className="flex-1 h-px bg-gradient-to-l from-transparent via-amber-300 to-amber-300" />
+          </div>
+          {dropOnDivider && (
+            <p className="text-center text-[10px] text-amber-600 mt-1 font-medium">Drop here to place at end of "Before Dispatch"</p>
+          )}
+        </div>
+
+        {/* Section label: After Dispatch */}
+        <div className="flex items-center gap-2 px-2 py-2 mb-1">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600">Call After Dispatch</span>
+          <span className="text-[11px] text-gray-400">({afterContacts.length})</span>
+        </div>
+
+        {/* After dispatch contacts */}
+        {afterContacts.length === 0 && (
+          <div
+            className={`mx-2 mb-2 py-6 border-2 border-dashed rounded-lg text-center transition-colors ${
+              dropTarget === null && !dropOnDivider && dragItemRef.current ? 'border-amber-300 bg-amber-50/50' : 'border-gray-200'
+            }`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              // Treat as dropping into after section at position 1
+              const fakeId = '__after_empty__';
+              setDropTarget({ id: fakeId, position: 'above' });
+              setDropOnDivider(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              const draggedId = dragItemRef.current;
+              if (!draggedId) return;
+              const dragged = contacts.find(c => c.id === draggedId);
+              if (!dragged) return;
+              const newBefore = beforeContacts.filter(c => c.id !== draggedId).map((c, i) => ({ ...c, contact_order: i + 1, call_section: 'before_dispatch' as CallSection }));
+              const newAfter = [{ ...dragged, call_section: 'after_dispatch' as CallSection, contact_order: 1 }];
+              persistOrder([...newBefore, ...newAfter]);
+              dragItemRef.current = null;
+              setDropTarget(null);
+              setDropOnDivider(false);
+            }}
+          >
+            <p className="text-xs text-gray-400">No contacts after dispatch. Drag here or add one.</p>
+          </div>
+        )}
+        {afterContacts.map((contact) => (
+          <ContactRow
+            key={contact.id}
+            contact={contact}
+            onEdit={() => setModalContact(contact)}
+            onDelete={() => handleDelete(contact.id)}
+            deleting={deleting === contact.id}
+            onDragStart={handleDragStart}
+            onDragOver={handleCardDragOver}
+            onDragEnd={handleDragEnd}
+            isDropAbove={dropTarget?.id === contact.id && dropTarget.position === 'above'}
+            isDropBelow={dropTarget?.id === contact.id && dropTarget.position === 'below'}
+          />
+        ))}
+      </div>
 
       {modalContact && (
         <ContactModal contact={modalContact} onClose={() => setModalContact(null)} onSave={handleSave} />
@@ -477,88 +453,98 @@ export default function EmergencyContactsTab({ systemId, contacts, onContactsCha
   );
 }
 
-interface SectionPanelProps {
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-  section: CallSection;
-  contacts: AlarmEmergencyContact[];
-  onAdd: () => void;
-  onEdit: (c: AlarmEmergencyContact) => void;
-  onDelete: (id: string) => void;
-  deleting: string | null;
+interface ContactRowProps {
+  contact: AlarmEmergencyContact;
+  onEdit: () => void;
+  onDelete: () => void;
+  deleting: boolean;
   onDragStart: (e: React.DragEvent, id: string) => void;
-  onDragOver: (e: React.DragEvent) => void;
-  onDrop: (e: React.DragEvent, targetId: string, section: CallSection) => void;
-  onDropOnSection: (e: React.DragEvent, section: CallSection) => void;
-  dragOverId: string | null;
-  setDragOverId: (id: string | null) => void;
+  onDragOver: (e: React.DragEvent, id: string) => void;
+  onDragEnd: () => void;
+  isDropAbove: boolean;
+  isDropBelow: boolean;
 }
 
-function SectionPanel({
-  title, description, icon, section, contacts, onAdd, onEdit, onDelete, deleting,
-  onDragStart, onDragOver, onDrop, onDropOnSection, dragOverId, setDragOverId,
-}: SectionPanelProps) {
-  const headerBg = section === 'before_dispatch' ? 'bg-blue-50/50' : 'bg-amber-50/50';
-  const borderColor = section === 'before_dispatch' ? 'border-blue-200' : 'border-amber-200';
-
+function ContactRow({ contact, onEdit, onDelete, deleting, onDragStart, onDragOver, onDragEnd, isDropAbove, isDropBelow }: ContactRowProps) {
   return (
     <div
-      className={`rounded-xl border ${borderColor} overflow-hidden`}
-      onDragOver={onDragOver}
-      onDrop={e => onDropOnSection(e, section)}
+      draggable
+      onDragStart={e => onDragStart(e, contact.id)}
+      onDragOver={e => onDragOver(e, contact.id)}
+      onDragEnd={onDragEnd}
+      className="relative mx-2 mb-1"
     >
-      <div className={`flex items-center justify-between px-6 py-4 ${headerBg} border-b ${borderColor}`}>
-        <div className="flex items-center gap-3">
-          {icon}
-          <div>
-            <h3 className="text-sm font-bold text-gray-900">{title}</h3>
-            <p className="text-xs text-gray-500 mt-0.5">{description}</p>
+      {/* Drop indicator above */}
+      <div className={`absolute -top-[3px] left-0 right-0 h-[3px] rounded-full transition-opacity ${isDropAbove ? 'opacity-100 bg-blue-500' : 'opacity-0'}`} />
+
+      <div className="group flex items-center gap-3 px-3 py-3 rounded-xl border border-gray-100 bg-white hover:border-gray-200 hover:shadow-sm transition-all cursor-grab active:cursor-grabbing active:shadow-md active:border-blue-200 active:bg-blue-50/30">
+        {/* Grip */}
+        <div className="flex-shrink-0 text-gray-300 group-hover:text-gray-400 transition-colors">
+          <GripVertical className="h-4 w-4" />
+        </div>
+
+        {/* Order badge */}
+        <div className="flex-shrink-0">
+          <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
+            (contact.call_section || 'before_dispatch') === 'before_dispatch'
+              ? 'bg-blue-100 text-blue-700'
+              : 'bg-amber-100 text-amber-700'
+          }`}>
+            {contact.contact_order}
+          </span>
+        </div>
+
+        {/* Contact info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-gray-900 truncate">
+              {contact.first_name} {contact.last_name}
+            </span>
+            {contact.relation && (
+              <span className="text-xs text-gray-400 flex-shrink-0">({contact.relation})</span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 mt-0.5">
+            <span className="flex items-center gap-1 text-xs text-gray-500 font-mono">
+              <Phone className="h-3 w-3 text-gray-400" />
+              {displayPhone(contact.phone) || '—'}
+            </span>
+            {contact.access_level && (
+              <span className="text-xs text-gray-400">{contact.access_level}</span>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${section === 'before_dispatch' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-            {contacts.length} {contacts.length === 1 ? 'contact' : 'contacts'}
-          </span>
+
+        {/* Badges */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {contact.has_ecv_ctv && (
+            <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 rounded border border-emerald-100">ECV</span>
+          )}
+          {contact.has_key && (
+            <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 rounded border border-amber-100">Key</span>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
-            onClick={onAdd}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-white border border-gray-200 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm"
+            onClick={onEdit}
+            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
           >
-            <Plus className="h-3.5 w-3.5" />
-            Add
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={onDelete}
+            disabled={deleting}
+            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
 
-      <div className="p-4">
-        {contacts.length === 0 ? (
-          <div className="py-10 text-center">
-            <Phone className="h-8 w-8 text-gray-200 mx-auto mb-2" />
-            <p className="text-sm text-gray-400">No contacts in this section</p>
-            <p className="text-xs text-gray-300 mt-1">Drag contacts here or click "Add" above</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {contacts.map((contact, idx) => (
-              <ContactCard
-                key={contact.id}
-                contact={contact}
-                index={idx}
-                onEdit={() => onEdit(contact)}
-                onDelete={() => onDelete(contact.id)}
-                deleting={deleting === contact.id}
-                onDragStart={onDragStart}
-                onDragOver={(e) => {
-                  onDragOver(e);
-                  setDragOverId(contact.id);
-                }}
-                onDrop={(e) => onDrop(e, contact.id, section)}
-                isDragTarget={dragOverId === contact.id}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Drop indicator below */}
+      <div className={`absolute -bottom-[3px] left-0 right-0 h-[3px] rounded-full transition-opacity ${isDropBelow ? 'opacity-100 bg-blue-500' : 'opacity-0'}`} />
     </div>
   );
 }
