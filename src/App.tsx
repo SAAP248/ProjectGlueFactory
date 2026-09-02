@@ -37,6 +37,7 @@ import Leads from './pages/Leads/index';
 import PhotosPage from './pages/Photos/index';
 import DocumentsPage from './pages/Documents/index';
 import UserManagement from './pages/UserManagement/index';
+import Inspections from './pages/Inspections/index';
 
 function App() {
   const { role } = useRole();
@@ -99,6 +100,8 @@ function App() {
         return <WorkOrders initialFilter={pageFilter} />;
       case 'tickets':
         return <Tickets />;
+      case 'inspections':
+        return <Inspections />;
       case 'tasks':
         return <Tasks />;
       case 'warehouses':

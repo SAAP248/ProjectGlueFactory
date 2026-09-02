@@ -8,6 +8,7 @@ import {
   MessageSquare,
   TrendingUp,
   Briefcase,
+  ClipboardCheck,
   ClipboardList,
   CheckSquare,
   Package,
@@ -57,6 +58,7 @@ const topNavItems = [
   { id: 'projects', label: 'Projects', icon: Briefcase },
   { id: 'work-orders', label: 'Work Orders', icon: ClipboardList },
   { id: 'tickets', label: 'Tickets', icon: LifeBuoy },
+  { id: 'inspections', label: 'Inspections', icon: ClipboardCheck },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare },
 ];
 
