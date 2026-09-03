@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Search, Upload, X, Eye, EyeOff, Download, ExternalLink,
-  FileText, Trash2, SlidersHorizontal, ChevronDown, ArrowUpDown
+  FileText, Trash2, SlidersHorizontal, ChevronDown, Image, FileSpreadsheet, FileType, File, Archive
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Document, DocumentUploadContext, DocumentFilters } from './types';
 import { EMPTY_FILTERS } from './types';
-import { useDocumentCategories, formatBytes, fileTypeLabel, fileTypeColor } from './useDocuments';
+import { useDocumentCategories, formatBytes, fileTypeLabel, fileTypeColor, fileTypeIconColor } from './useDocuments';
 import DocumentUploadModal from './DocumentUploadModal';
 import DocumentViewer from './DocumentViewer';
 
@@ -144,6 +144,15 @@ export default function DocumentGallery({ context }: Props) {
   ].filter(Boolean).length;
 
   const categoriesInUse = categories.filter(c => documents.some(d => d.category_id === c.id));
+
+  function fileIcon(mimeType: string) {
+    if (mimeType === 'application/pdf') return <FileText className={`h-5 w-5 ${fileTypeIconColor(mimeType)}`} />;
+    if (mimeType.startsWith('image/')) return <Image className={`h-5 w-5 ${fileTypeIconColor(mimeType)}`} />;
+    if (mimeType.includes('excel') || mimeType.includes('xlsx') || mimeType.includes('spreadsheet')) return <FileSpreadsheet className={`h-5 w-5 ${fileTypeIconColor(mimeType)}`} />;
+    if (mimeType.includes('word') || mimeType.includes('docx')) return <FileType className={`h-5 w-5 ${fileTypeIconColor(mimeType)}`} />;
+    if (mimeType.includes('zip') || mimeType.includes('compressed')) return <Archive className={`h-5 w-5 ${fileTypeIconColor(mimeType)}`} />;
+    return <File className={`h-5 w-5 ${fileTypeIconColor(mimeType)}`} />;
+  }
 
   return (
     <div className="space-y-4">
@@ -310,107 +319,158 @@ export default function DocumentGallery({ context }: Props) {
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="divide-y divide-gray-100">
-            {documents.map(doc => {
-              const cat = categories.find(c => c.id === doc.category_id);
-              return (
-                <div
-                  key={doc.id}
-                  className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 transition-colors group"
-                >
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer"
-                    style={{ backgroundColor: '#f3f4f6' }}
-                    onClick={() => setViewerDoc(doc)}
-                  >
-                    <FileText className="h-5 w-5 text-gray-400" />
-                  </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="sticky top-0 bg-gray-50 z-10 px-4 py-2.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wider w-[42%]">
+                    Name
+                  </th>
+                  <th className="sticky top-0 bg-gray-50 z-10 px-3 py-2.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wider w-[14%]">
+                    Category
+                  </th>
+                  <th className="sticky top-0 bg-gray-50 z-10 px-3 py-2.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wider w-[8%]">
+                    Type
+                  </th>
+                  <th className="sticky top-0 bg-gray-50 z-10 px-3 py-2.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wider w-[14%]">
+                    Uploaded By
+                  </th>
+                  <th className="sticky top-0 bg-gray-50 z-10 px-3 py-2.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wider w-[12%]">
+                    Date
+                  </th>
+                  <th className="sticky top-0 bg-gray-50 z-10 px-3 py-2.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wider w-[10%] text-right">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {documents.map(doc => {
+                  const cat = categories.find(c => c.id === doc.category_id);
+                  return (
+                    <tr
+                      key={doc.id}
+                      onClick={() => setViewerDoc(doc)}
+                      className="hover:bg-gray-50/80 transition-colors cursor-pointer group"
+                    >
+                      {/* Name column: icon + file name + portal badge + size */}
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center flex-shrink-0">
+                            {fileIcon(doc.file_type)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-sm font-medium text-gray-900 truncate block">{doc.file_name}</span>
+                              {doc.show_in_portal && (
+                                <span className="flex-shrink-0 flex items-center gap-0.5 text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                                  <Eye className="h-2.5 w-2.5" />
+                                  Portal
+                                </span>
+                              )}
+                            </div>
+                            {(doc.description || doc.file_size_bytes) && (
+                              <p className="text-[11px] text-gray-400 truncate mt-0.5">
+                                {doc.description && <span>{doc.description}</span>}
+                                {doc.description && doc.file_size_bytes ? ' \u00B7 ' : ''}
+                                {doc.file_size_bytes ? formatBytes(doc.file_size_bytes) : ''}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
 
-                  <div
-                    className="flex-1 min-w-0 cursor-pointer"
-                    onClick={() => setViewerDoc(doc)}
-                  >
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{doc.file_name}</p>
-                      <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${fileTypeColor(doc.file_type)}`}>
-                        {fileTypeLabel(doc.file_type)}
-                      </span>
-                      {cat && (
-                        <span
-                          className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
-                          style={{ backgroundColor: cat.color }}
-                        >
-                          {cat.name}
-                        </span>
-                      )}
-                      {doc.show_in_portal && (
-                        <span className="flex items-center gap-1 text-xs text-blue-600 font-medium">
-                          <Eye className="h-3 w-3" />
-                          Portal
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {doc.description && <span className="text-gray-500">{doc.description} · </span>}
-                      {formatBytes(doc.file_size_bytes)}
-                      {doc.file_size_bytes ? ' · ' : ''}
-                      {new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      {doc.uploaded_by ? ` · ${doc.uploaded_by}` : ''}
-                    </p>
-                  </div>
+                      {/* Category column */}
+                      <td className="px-3 py-2.5">
+                        {cat ? (
+                          <span
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full text-white max-w-full truncate"
+                            style={{ backgroundColor: cat.color }}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-white/50 flex-shrink-0" />
+                            <span className="truncate">{cat.name}</span>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-300">&mdash;</span>
+                        )}
+                      </td>
 
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                    <button
-                      onClick={e => { e.stopPropagation(); handleUpdate(doc.id, { show_in_portal: !doc.show_in_portal }); }}
-                      title={doc.show_in_portal ? 'Hide from portal' : 'Show in portal'}
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
-                        doc.show_in_portal
-                          ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
-                          : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                      }`}
-                    >
-                      {doc.show_in_portal ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                    </button>
-                    <a
-                      href={doc.file_url}
-                      download={doc.file_name}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-7 h-7 rounded-lg flex items-center justify-center bg-gray-100 text-gray-400 hover:bg-blue-100 hover:text-blue-600 transition-colors"
-                      title="Download"
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                    </a>
-                    <a
-                      href={doc.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-7 h-7 rounded-lg flex items-center justify-center bg-gray-100 text-gray-400 hover:bg-blue-100 hover:text-blue-600 transition-colors"
-                      title="Open in new tab"
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                    {confirmDeleteId === doc.id ? (
-                      <div className="flex items-center gap-1 bg-red-50 rounded-lg px-2 py-1">
-                        <span className="text-xs text-red-600">Delete?</span>
-                        <button onClick={() => handleDelete(doc.id)} className="text-xs font-bold text-red-600 hover:text-red-800">Yes</button>
-                        <button onClick={() => setConfirmDeleteId(null)} className="text-xs text-gray-500">No</button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={e => { e.stopPropagation(); setConfirmDeleteId(doc.id); }}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-500 transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                      {/* Type column */}
+                      <td className="px-3 py-2.5">
+                        <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${fileTypeColor(doc.file_type)}`}>
+                          {fileTypeLabel(doc.file_type)}
+                        </span>
+                      </td>
+
+                      {/* Uploaded By column */}
+                      <td className="px-3 py-2.5">
+                        <span className="text-xs text-gray-600 truncate block">{doc.uploaded_by || '\u2014'}</span>
+                      </td>
+
+                      {/* Date column */}
+                      <td className="px-3 py-2.5">
+                        <span className="text-xs text-gray-500 whitespace-nowrap">
+                          {new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      </td>
+
+                      {/* Actions column */}
+                      <td className="px-3 py-2.5 text-right" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleUpdate(doc.id, { show_in_portal: !doc.show_in_portal })}
+                            title={doc.show_in_portal ? 'Hide from portal' : 'Show in portal'}
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                              doc.show_in_portal
+                                ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                                : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                            }`}
+                          >
+                            {doc.show_in_portal ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                          </button>
+                          <a
+                            href={doc.file_url}
+                            download={doc.file_name}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-7 h-7 rounded-lg flex items-center justify-center bg-gray-100 text-gray-400 hover:bg-blue-100 hover:text-blue-600 transition-colors"
+                            title="Download"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </a>
+                          <a
+                            href={doc.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-7 h-7 rounded-lg flex items-center justify-center bg-gray-100 text-gray-400 hover:bg-blue-100 hover:text-blue-600 transition-colors"
+                            title="Open in new tab"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                          {confirmDeleteId === doc.id ? (
+                            <div className="flex items-center gap-1 bg-red-50 rounded-lg px-2 py-1">
+                              <span className="text-xs text-red-600">Delete?</span>
+                              <button onClick={() => handleDelete(doc.id)} className="text-xs font-bold text-red-600 hover:text-red-800">Yes</button>
+                              <button onClick={() => setConfirmDeleteId(null)} className="text-xs text-gray-500">No</button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmDeleteId(doc.id)}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-500 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="border-t border-gray-100 px-4 py-2 bg-gray-50/50">
+            <p className="text-xs text-gray-400">{documents.length} document{documents.length !== 1 ? 's' : ''}</p>
           </div>
         </div>
       )}

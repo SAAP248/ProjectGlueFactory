@@ -65,3 +65,13 @@ export function fileTypeColor(mimeType: string): string {
   if (mimeType.includes('zip') || mimeType.includes('compressed')) return 'bg-amber-100 text-amber-700';
   return 'bg-gray-100 text-gray-600';
 }
+
+export function fileTypeIconColor(mimeType: string): string {
+  if (mimeType === 'application/pdf') return 'text-red-500';
+  if (mimeType.includes('word') || mimeType.includes('docx')) return 'text-blue-500';
+  if (mimeType.includes('excel') || mimeType.includes('xlsx') || mimeType.includes('spreadsheet')) return 'text-green-500';
+  if (mimeType.includes('powerpoint') || mimeType.includes('pptx')) return 'text-orange-500';
+  if (mimeType.startsWith('image/')) return 'text-teal-500';
+  if (mimeType.includes('zip') || mimeType.includes('compressed')) return 'text-amber-500';
+  return 'text-gray-400';
+}
