@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, CreditCard as Edit, Clock, MapPin, User, Wrench, DollarSign, Camera, FileText, ChevronDown, Plus, Trash2, AlertTriangle, CheckCircle, Navigation, Timer, CreditCard, Receipt, RotateCcw, Activity, Phone, MessageSquare, Building2, Radio, X as XIcon } from 'lucide-react';
+import { ArrowLeft, CreditCard as Edit, Clock, MapPin, User, Wrench, DollarSign, Camera, FileText, ChevronDown, Plus, Trash2, AlertTriangle, CheckCircle, Navigation, Timer, CreditCard, Receipt, RotateCcw, Activity, Phone, MessageSquare, Building2, Radio, X as XIcon, ClipboardCheck } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { WorkOrder, WorkOrderLineItem, WorkOrderAttachment } from '../CustomerProfile/types';
 import AssignmentsCard, { TechAssignment } from './AssignmentsCard';
@@ -8,6 +8,15 @@ interface Props {
   workOrderId: string;
   onBack: () => void;
   onEdit: (id: string) => void;
+  onAddInspection?: (workOrderId: string) => void;
+}
+
+interface LinkedInspection {
+  id: string;
+  inspection_number: string;
+  status: string;
+  inspection_date: string | null;
+  employees: { first_name: string; last_name: string } | null;
 }
 
 interface GoBackReason {
@@ -104,7 +113,7 @@ function formatDateTime(ts: string | null): string {
   });
 }
 
-export default function WorkOrderDetail({ workOrderId, onBack, onEdit }: Props) {
+export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInspection }: Props) {
   const [activeTab, setActiveTab] = useState('summary');
   const [wo, setWo] = useState<WorkOrder | null>(null);
   const [lineItems, setLineItems] = useState<WorkOrderLineItem[]>([]);
@@ -122,6 +131,7 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit }: Props) 
   const [savingPayment, setSavingPayment] = useState(false);
 
   const [goBackModal, setGoBackModal] = useState(false);
+  const [linkedInspections, setLinkedInspections] = useState<LinkedInspection[]>([]);
   const [goBackReasons, setGoBackReasons] = useState<GoBackReason[]>([]);
   const [selectedReasonIds, setSelectedReasonIds] = useState<string[]>([]);
   const [goBackNotes, setGoBackNotes] = useState('');
@@ -187,7 +197,27 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit }: Props) 
     if (activeTab === 'timeline') {
       loadTimeline();
     }
+    if (activeTab === 'inspections') {
+      loadLinkedInspections();
+    }
   }, [activeTab, workOrderId]);
+
+  async function loadLinkedInspections() {
+    const { data } = await supabase
+      .from('inspections')
+      .select('id, inspection_number, status, inspection_date, employees(first_name, last_name)')
+      .eq('work_order_id', workOrderId)
+      .order('created_at', { ascending: false });
+    if (data) setLinkedInspections(data as LinkedInspection[]);
+  }
+
+  useEffect(() => {
+    supabase
+      .from('inspections')
+      .select('id')
+      .eq('work_order_id', workOrderId)
+      .then(({ data }) => setLinkedInspections(prev => prev.length ? prev : (data || []) as any));
+  }, [workOrderId]);
 
   async function loadGoBackReasons() {
     const { data } = await supabase
@@ -384,6 +414,15 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit }: Props) 
               >
                 <RotateCcw className="h-4 w-4" />
                 Mark as Go-Back
+              </button>
+            )}
+            {onAddInspection && (
+              <button
+                onClick={() => onAddInspection(wo.id)}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+              >
+                <ClipboardCheck className="h-4 w-4" />
+                Add Inspection
               </button>
             )}
             <button
@@ -596,6 +635,7 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit }: Props) 
             { id: 'photos', label: `Photos (${attachments.length})`, icon: Camera },
             { id: 'payment', label: 'Payment', icon: CreditCard },
             { id: 'timeline', label: 'Timeline', icon: Activity },
+            { id: 'inspections', label: `Inspections (${linkedInspections.length})`, icon: ClipboardCheck },
           ].map(tab => (
             <button
               key={tab.id}
@@ -1102,6 +1142,46 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit }: Props) 
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Mark as Go-Back Modal */}
+
+      {/* Inspections Tab */}
+      {activeTab === 'inspections' && (
+        <div className="max-w-2xl space-y-3">
+          {onAddInspection && (
+            <button
+              onClick={() => onAddInspection(wo.id)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors mb-4"
+            >
+              <Plus className="h-4 w-4" />
+              Add Inspection
+            </button>
+          )}
+          {linkedInspections.length === 0 ? (
+            <div className="text-center py-12">
+              <ClipboardCheck className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">No inspections linked to this work order.</p>
+            </div>
+          ) : linkedInspections.map(insp => (
+            <div key={insp.id} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between hover:border-blue-200 transition-colors">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-gray-900">{insp.inspection_number}</span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                    insp.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                  }`}>
+                    {insp.status === 'completed' ? 'Completed' : 'Draft'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
+                  {insp.inspection_date && <span>{new Date(insp.inspection_date + 'T00:00:00').toLocaleDateString()}</span>}
+                  {insp.employees && <span>{insp.employees.first_name} {insp.employees.last_name}</span>}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

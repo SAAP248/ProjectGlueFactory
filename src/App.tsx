@@ -45,6 +45,7 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [pageFilter, setPageFilter] = useState<string | undefined>(undefined);
+  const [pendingInspectionId, setPendingInspectionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!canAccessPage(role, currentPage)) {
@@ -97,11 +98,14 @@ function App() {
       case 'projects':
         return <ProjectManagement />;
       case 'work-orders':
-        return <WorkOrders initialFilter={pageFilter} />;
+        return <WorkOrders initialFilter={pageFilter} onNavigateToInspection={(inspId) => {
+          setPendingInspectionId(inspId);
+          setCurrentPage('inspections');
+        }} />;
       case 'tickets':
         return <Tickets />;
       case 'inspections':
-        return <Inspections />;
+        return <Inspections initialInspectionId={pendingInspectionId} onConsumeInitial={() => setPendingInspectionId(null)} />;
       case 'tasks':
         return <Tasks />;
       case 'warehouses':

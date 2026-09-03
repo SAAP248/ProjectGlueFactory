@@ -9,3 +9,10 @@
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+@media print {
+  body { background: white !important; }
+  .print\:hidden { display: none !important; }
+  .print\:break-after-page { break-after: page; }
+  @page { size: letter; margin: 0.25in; }
+}

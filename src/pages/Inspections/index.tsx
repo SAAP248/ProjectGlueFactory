@@ -1,37 +1,69 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import InspectionsList from './InspectionsList';
+import InspectionForm from './InspectionForm';
+import InspectionPrintPreview from './InspectionPrintPreview';
+import NewInspectionModal from './NewInspectionModal';
 import { useInspections } from './useInspections';
 
-type View = { type: 'list' } | { type: 'detail'; id: string };
+type View =
+  | { type: 'list' }
+  | { type: 'form'; id: string }
+  | { type: 'preview'; id: string };
 
-export default function Inspections() {
+interface Props {
+  initialInspectionId?: string | null;
+  onConsumeInitial?: () => void;
+}
+
+export default function Inspections({ initialInspectionId, onConsumeInitial }: Props) {
   const [view, setView] = useState<View>({ type: 'list' });
+  const [showNewModal, setShowNewModal] = useState(false);
   const { inspections, loading, reload } = useInspections();
 
-  if (view.type === 'detail') {
-    // Inspection form will be built in the next phase
+  useEffect(() => {
+    if (initialInspectionId) {
+      setView({ type: 'form', id: initialInspectionId });
+      onConsumeInitial?.();
+    }
+  }, [initialInspectionId]);
+
+  if (view.type === 'form') {
     return (
-      <div className="p-6">
-        <button
-          onClick={() => { setView({ type: 'list' }); reload(); }}
-          className="text-sm text-blue-600 hover:text-blue-700 font-medium mb-4"
-        >
-          &larr; Back to Inspections
-        </button>
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-          <p className="text-gray-500">Inspection form will appear here (next phase).</p>
-          <p className="text-xs text-gray-400 mt-1">ID: {view.id}</p>
-        </div>
-      </div>
+      <InspectionForm
+        inspectionId={view.id}
+        onBack={() => { setView({ type: 'list' }); reload(); }}
+        onNavigateToPreview={(id) => setView({ type: 'preview', id })}
+      />
+    );
+  }
+
+  if (view.type === 'preview') {
+    return (
+      <InspectionPrintPreview
+        inspectionId={view.id}
+        onBack={() => setView({ type: 'form', id: view.id })}
+      />
     );
   }
 
   return (
-    <InspectionsList
-      inspections={inspections}
-      loading={loading}
-      onView={(id) => setView({ type: 'detail', id })}
-      onNew={() => {/* Will be wired in next phase */}}
-    />
+    <>
+      <InspectionsList
+        inspections={inspections}
+        loading={loading}
+        onView={(id) => setView({ type: 'form', id })}
+        onNew={() => setShowNewModal(true)}
+      />
+      {showNewModal && (
+        <NewInspectionModal
+          onClose={() => setShowNewModal(false)}
+          onCreate={(id) => {
+            setShowNewModal(false);
+            setView({ type: 'form', id });
+            reload();
+          }}
+        />
+      )}
+    </>
   );
 }
