@@ -120,21 +120,7 @@ export default function DocumentGallery({ context }: Props) {
   }
 
   async function handleUpload(file: File, ctx: DocumentUploadContext, uploadedBy: string, description: string, categoryId: string, showInPortal: boolean) {
-    let fileUrl = '';
-    try {
-      const ext = file.name.split('.').pop() ?? 'bin';
-      const path = `site-documents/${ctx.companyId ?? 'global'}/${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage.from('site-documents').upload(path, file, { contentType: file.type });
-      if (!error) {
-        const { data: { publicUrl } } = supabase.storage.from('site-documents').getPublicUrl(path);
-        fileUrl = publicUrl;
-      } else {
-        fileUrl = await toDataUrl(file);
-      }
-    } catch {
-      fileUrl = await toDataUrl(file);
-    }
-
+    const fileUrl = await toDataUrl(file);
     await supabase.from('documents').insert({
       file_name: file.name,
       file_url: fileUrl,
