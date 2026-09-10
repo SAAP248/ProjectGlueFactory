@@ -259,6 +259,7 @@ function RepeatingTable({ field, value, onChange, disabled }: {
 }) {
   const columns = field.columns || [];
   const rows = (Array.isArray(value) ? value : []) as Record<string, string>[];
+  const [photoPickerCell, setPhotoPickerCell] = useState<{ row: number; col: string } | null>(null);
 
   const addRow = () => {
     const empty: Record<string, string> = {};
@@ -285,7 +286,7 @@ function RepeatingTable({ field, value, onChange, disabled }: {
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="px-2 py-2 text-left text-xs font-semibold text-gray-500 w-8">#</th>
                 {columns.map(col => (
-                  <th key={col.id} className="px-2 py-2 text-left text-xs font-semibold text-gray-500 min-w-[120px]">
+                  <th key={col.id} className={`px-2 py-2 text-left text-xs font-semibold text-gray-500 ${col.type === 'photo' ? 'min-w-[80px]' : 'min-w-[120px]'}`}>
                     {col.label}
                   </th>
                 ))}
@@ -304,7 +305,17 @@ function RepeatingTable({ field, value, onChange, disabled }: {
                   <td className="px-2 py-1.5 text-xs text-gray-400 font-mono">{ri + 1}</td>
                   {columns.map(col => (
                     <td key={col.id} className="px-1 py-1">
-                      {col.type === 'select' ? (
+                      {col.type === 'photo' ? (
+                        <TablePhotoCell
+                          value={row[col.id] || ''}
+                          disabled={disabled}
+                          isPickerOpen={photoPickerCell?.row === ri && photoPickerCell?.col === col.id}
+                          onOpenPicker={() => setPhotoPickerCell({ row: ri, col: col.id })}
+                          onClosePicker={() => setPhotoPickerCell(null)}
+                          onSelect={(url) => { updateCell(ri, col.id, url); setPhotoPickerCell(null); }}
+                          onClear={() => updateCell(ri, col.id, '')}
+                        />
+                      ) : col.type === 'select' ? (
                         <select
                           value={row[col.id] || ''}
                           onChange={e => updateCell(ri, col.id, e.target.value)}
@@ -350,6 +361,82 @@ function RepeatingTable({ field, value, onChange, disabled }: {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+const PRODUCT_DEMO_PHOTOS = [
+  { url: 'https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=120&h=120&fit=crop', label: 'Panel' },
+  { url: 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=120&h=120&fit=crop', label: 'Strobe' },
+  { url: 'https://images.unsplash.com/photo-1558002038-1055907df827?w=120&h=120&fit=crop', label: 'Detector' },
+  { url: 'https://images.unsplash.com/photo-1565439441965-6fcf24154938?w=120&h=120&fit=crop', label: 'Pull station' },
+  { url: 'https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?w=120&h=120&fit=crop', label: 'Device' },
+  { url: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=120&h=120&fit=crop', label: 'Wiring' },
+];
+
+function TablePhotoCell({ value, disabled, isPickerOpen, onOpenPicker, onClosePicker, onSelect, onClear }: {
+  value: string;
+  disabled?: boolean;
+  isPickerOpen: boolean;
+  onOpenPicker: () => void;
+  onClosePicker: () => void;
+  onSelect: (url: string) => void;
+  onClear: () => void;
+}) {
+  if (value) {
+    return (
+      <div className="relative group w-14 h-14">
+        <img src={value} alt="Product" className="w-14 h-14 rounded object-cover border border-gray-200" />
+        {!disabled && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <X className="h-2.5 w-2.5 text-white" />
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      {!disabled ? (
+        <button
+          type="button"
+          onClick={onOpenPicker}
+          className="w-14 h-14 rounded border-2 border-dashed border-gray-200 flex items-center justify-center text-gray-300 hover:border-blue-300 hover:text-blue-400 transition-colors"
+        >
+          <Camera className="h-4 w-4" />
+        </button>
+      ) : (
+        <div className="w-14 h-14 rounded border border-gray-100 bg-gray-50 flex items-center justify-center">
+          <Image className="h-4 w-4 text-gray-200" />
+        </div>
+      )}
+      {isPickerOpen && (
+        <div className="absolute top-0 left-16 z-30 bg-white border border-gray-200 rounded-lg shadow-xl p-2 w-[200px]">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Select Photo</span>
+            <button type="button" onClick={onClosePicker} className="text-gray-400 hover:text-gray-600">
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-1">
+            {PRODUCT_DEMO_PHOTOS.map((p) => (
+              <button
+                key={p.url}
+                type="button"
+                onClick={() => onSelect(p.url)}
+                className="rounded overflow-hidden border border-gray-100 hover:border-blue-400 hover:ring-1 hover:ring-blue-200 transition-all"
+              >
+                <img src={p.url} alt={p.label} className="w-full h-14 object-cover" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
