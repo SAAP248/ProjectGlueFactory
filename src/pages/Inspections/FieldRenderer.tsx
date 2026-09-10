@@ -279,88 +279,107 @@ function RepeatingTable({ field, value, onChange, disabled }: {
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-2">{field.label}</label>
-      <div className="border border-gray-200 rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-500 w-8">#</th>
-                {columns.map(col => (
-                  <th key={col.id} className={`px-2 py-2 text-left text-xs font-semibold text-gray-500 ${col.type === 'photo' ? 'min-w-[80px]' : 'min-w-[120px]'}`}>
-                    {col.label}
-                  </th>
-                ))}
-                {!disabled && <th className="px-2 py-2 w-10"></th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={columns.length + (disabled ? 1 : 2)} className="px-4 py-6 text-center text-gray-400 text-sm">
-                    No rows added yet
-                  </td>
-                </tr>
-              ) : rows.map((row, ri) => (
-                <tr key={ri} className="hover:bg-gray-50/50">
-                  <td className="px-2 py-1.5 text-xs text-gray-400 font-mono">{ri + 1}</td>
-                  {columns.map(col => (
-                    <td key={col.id} className="px-1 py-1">
-                      {col.type === 'photo' ? (
-                        <TablePhotoCell
-                          value={row[col.id] || ''}
-                          disabled={disabled}
-                          isPickerOpen={photoPickerCell?.row === ri && photoPickerCell?.col === col.id}
-                          onOpenPicker={() => setPhotoPickerCell({ row: ri, col: col.id })}
-                          onClosePicker={() => setPhotoPickerCell(null)}
-                          onSelect={(url) => { updateCell(ri, col.id, url); setPhotoPickerCell(null); }}
-                          onClear={() => updateCell(ri, col.id, '')}
-                        />
-                      ) : col.type === 'select' ? (
-                        <select
-                          value={row[col.id] || ''}
-                          onChange={e => updateCell(ri, col.id, e.target.value)}
-                          disabled={disabled}
-                          className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
-                        >
-                          <option value="">--</option>
-                          {(col.options || []).map(o => <option key={o} value={o}>{o}</option>)}
-                        </select>
-                      ) : (
-                        <input
-                          type={col.type === 'number' ? 'number' : 'text'}
-                          value={row[col.id] || ''}
-                          onChange={e => updateCell(ri, col.id, e.target.value)}
-                          disabled={disabled}
-                          className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
-                        />
-                      )}
-                    </td>
-                  ))}
-                  {!disabled && (
-                    <td className="px-1 py-1">
-                      <button type="button" onClick={() => removeRow(ri)} className="p-1 text-gray-400 hover:text-red-500">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {!disabled && (
-          <div className="border-t border-gray-200 bg-gray-50 px-3 py-2">
-            <button
-              type="button"
-              onClick={addRow}
-              className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Row
-            </button>
+
+      {/* Empty state with prominent CTA */}
+      {rows.length === 0 && !disabled && (
+        <button
+          type="button"
+          onClick={addRow}
+          className="w-full flex flex-col items-center gap-2 px-6 py-8 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 hover:border-blue-400 hover:bg-blue-50/40 hover:text-blue-600 transition-all group"
+        >
+          <div className="w-12 h-12 rounded-full bg-gray-100 group-hover:bg-blue-100 flex items-center justify-center transition-colors">
+            <Plus className="h-6 w-6" />
           </div>
-        )}
-      </div>
+          <span className="text-sm font-semibold">Add First Entry</span>
+          <span className="text-xs">Click here to start adding items to this list</span>
+        </button>
+      )}
+
+      {rows.length === 0 && disabled && (
+        <div className="w-full flex flex-col items-center gap-1 px-6 py-8 border border-gray-200 rounded-xl bg-gray-50 text-gray-400">
+          <span className="text-sm">No entries recorded</span>
+        </div>
+      )}
+
+      {/* Table with rows */}
+      {rows.length > 0 && (
+        <div className="border border-gray-200 rounded-lg overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="px-2 py-2 text-left text-xs font-semibold text-gray-500 w-8">#</th>
+                  {columns.map(col => (
+                    <th key={col.id} className={`px-2 py-2 text-left text-xs font-semibold text-gray-500 ${col.type === 'photo' ? 'min-w-[80px]' : 'min-w-[120px]'}`}>
+                      {col.label}
+                    </th>
+                  ))}
+                  {!disabled && <th className="px-2 py-2 w-10"></th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {rows.map((row, ri) => (
+                  <tr key={ri} className="hover:bg-gray-50/50">
+                    <td className="px-2 py-1.5 text-xs text-gray-400 font-mono">{ri + 1}</td>
+                    {columns.map(col => (
+                      <td key={col.id} className="px-1 py-1">
+                        {col.type === 'photo' ? (
+                          <TablePhotoCell
+                            value={row[col.id] || ''}
+                            disabled={disabled}
+                            isPickerOpen={photoPickerCell?.row === ri && photoPickerCell?.col === col.id}
+                            onOpenPicker={() => setPhotoPickerCell({ row: ri, col: col.id })}
+                            onClosePicker={() => setPhotoPickerCell(null)}
+                            onSelect={(url) => { updateCell(ri, col.id, url); setPhotoPickerCell(null); }}
+                            onClear={() => updateCell(ri, col.id, '')}
+                          />
+                        ) : col.type === 'select' ? (
+                          <select
+                            value={row[col.id] || ''}
+                            onChange={e => updateCell(ri, col.id, e.target.value)}
+                            disabled={disabled}
+                            className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
+                          >
+                            <option value="">--</option>
+                            {(col.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        ) : (
+                          <input
+                            type={col.type === 'number' ? 'number' : 'text'}
+                            value={row[col.id] || ''}
+                            onChange={e => updateCell(ri, col.id, e.target.value)}
+                            disabled={disabled}
+                            className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
+                          />
+                        )}
+                      </td>
+                    ))}
+                    {!disabled && (
+                      <td className="px-1 py-1">
+                        <button type="button" onClick={() => removeRow(ri)} className="p-1 text-gray-400 hover:text-red-500">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!disabled && (
+            <div className="border-t border-gray-200 bg-gray-50 px-3 py-2.5">
+              <button
+                type="button"
+                onClick={addRow}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border-2 border-dashed border-gray-300 rounded-lg text-sm font-semibold text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                Add Another Entry
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
