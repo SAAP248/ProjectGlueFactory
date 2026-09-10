@@ -112,7 +112,10 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
     setSelectedCustomerId(companyId);
     setSelectedSiteId('');
     setSites([]);
-    if (companyId) loadSites(companyId);
+    if (companyId) {
+      setSitesLoading(true);
+      loadSites(companyId);
+    }
   }
 
   const filteredWOs = workOrders.filter(w => {
