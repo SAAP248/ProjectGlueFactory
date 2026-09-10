@@ -61,6 +61,7 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
   const [customerSearch, setCustomerSearch] = useState('');
   const [manualLoading, setManualLoading] = useState(false);
 
+  const [sitesLoading, setSitesLoading] = useState(false);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -97,12 +98,14 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
   }
 
   async function loadSites(companyId: string) {
+    setSitesLoading(true);
     const { data } = await supabase
       .from('sites')
       .select('id, name, address, city, state, zip, phone, company_id')
       .eq('company_id', companyId)
       .order('name');
     setSites((data as SiteOption[]) || []);
+    setSitesLoading(false);
   }
 
   function handleCustomerChange(companyId: string) {
@@ -503,28 +506,39 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
                   {/* Site picker */}
                   {selectedCustomerId && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Site (optional)</label>
-                      {sites.length === 0 ? (
-                        <p className="text-xs text-gray-400 italic">No sites found for this customer.</p>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Select a Site</label>
+                      <p className="text-xs text-gray-400 mb-2">The site address will be automatically filled into the inspection form.</p>
+                      {sitesLoading ? (
+                        <div className="flex items-center justify-center py-6 border border-gray-200 rounded-lg">
+                          <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent" />
+                          <span className="ml-2 text-sm text-gray-400">Loading sites...</span>
+                        </div>
+                      ) : sites.length === 0 ? (
+                        <div className="py-5 text-center border border-dashed border-gray-200 rounded-lg">
+                          <MapPin className="h-5 w-5 text-gray-300 mx-auto mb-1" />
+                          <p className="text-xs text-gray-400">No sites found for this customer.</p>
+                        </div>
                       ) : (
-                        <div className="max-h-[160px] overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                        <div className="max-h-[180px] overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
                           {sites.map(s => {
                             const isSelected = selectedSiteId === s.id;
+                            const fullAddr = [s.address, s.city, s.state, s.zip].filter(Boolean).join(', ');
                             return (
                               <button
                                 key={s.id}
                                 onClick={() => setSelectedSiteId(isSelected ? '' : s.id)}
-                                className={`w-full text-left px-4 py-2.5 transition-colors flex items-center justify-between ${
-                                  isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
+                                className={`w-full text-left px-4 py-3 transition-colors flex items-center justify-between gap-3 ${
+                                  isSelected ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : 'hover:bg-gray-50'
                                 }`}
                               >
-                                <div>
-                                  <p className={`text-sm ${isSelected ? 'text-blue-700 font-medium' : 'text-gray-700'}`}>
+                                <div className="min-w-0">
+                                  <p className={`text-sm font-medium truncate ${isSelected ? 'text-blue-700' : 'text-gray-800'}`}>
                                     {s.name}
                                   </p>
-                                  {s.address && (
-                                    <p className="text-xs text-gray-400 mt-0.5">
-                                      {s.address}{s.city ? `, ${s.city}` : ''}{s.state ? ` ${s.state}` : ''}
+                                  {fullAddr && (
+                                    <p className={`text-xs mt-0.5 truncate ${isSelected ? 'text-blue-500' : 'text-gray-400'}`}>
+                                      <MapPin className="inline h-3 w-3 mr-0.5 -mt-0.5" />
+                                      {fullAddr}
                                     </p>
                                   )}
                                 </div>
@@ -540,6 +554,36 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
                       )}
                     </div>
                   )}
+
+                  {/* Selection summary */}
+                  {selectedCustomerId && selectedSiteId && (() => {
+                    const cust = customers.find(c => c.id === selectedCustomerId);
+                    const site = sites.find(s => s.id === selectedSiteId);
+                    if (!cust || !site) return null;
+                    const parts = [site.address, site.city, site.state, site.zip].filter(Boolean);
+                    return (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <Check className="h-4 w-4 text-emerald-600" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-emerald-800">Ready to create</p>
+                            <p className="text-xs text-emerald-700 mt-1">
+                              <span className="font-medium">{cust.name}</span>
+                              {' '}&#8212; {site.name}
+                            </p>
+                            {parts.length > 0 && (
+                              <p className="text-xs text-emerald-600 mt-0.5">
+                                {parts.join(', ')}
+                              </p>
+                            )}
+                            <p className="text-xs text-emerald-600 mt-1 italic">This address will be auto-filled on the inspection form.</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </>
