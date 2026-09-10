@@ -167,6 +167,21 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
     let techEmployeeId: string | null = null;
     let contactId: string | null = null;
 
+    // Load the servicing company profile for auto-fill
+    const { data: companyProfile } = await supabase
+      .from('company_profile')
+      .select('name, address, city, state, zip, phone, license_number')
+      .limit(1)
+      .maybeSingle();
+
+    if (companyProfile) {
+      const fullAddr = [companyProfile.address, companyProfile.city, companyProfile.state, companyProfile.zip].filter(Boolean).join(', ');
+      prefillData.workhorse_company_name = companyProfile.name || '';
+      prefillData.workhorse_company_address = fullAddr;
+      prefillData.workhorse_company_phone = companyProfile.phone || '';
+      prefillData.workhorse_license = companyProfile.license_number || '';
+    }
+
     if (mode === 'with-wo' && selectedWO) {
       workOrderId = selectedWO.id;
       companyId = selectedWO.company_id;
@@ -180,6 +195,20 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
 
       prefillData.site_name = selectedWO.sites?.name || '';
       prefillData.wo_number = selectedWO.wo_number;
+
+      // Look up alarm account number from customer_systems
+      if (selectedWO.site_id) {
+        const { data: sysData } = await supabase
+          .from('customer_systems')
+          .select('monitoring_account_number')
+          .eq('site_id', selectedWO.site_id)
+          .not('monitoring_account_number', 'is', null)
+          .limit(1)
+          .maybeSingle();
+        if (sysData?.monitoring_account_number) {
+          prefillData.alarm_account = sysData.monitoring_account_number;
+        }
+      }
 
       const { data: techData } = await supabase
         .from('work_order_technicians')
@@ -223,6 +252,17 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
           prefillData.site_state = site.state || '';
           prefillData.site_zip = site.zip || '';
 
+          // Look up alarm account number from customer_systems
+          const { data: sysData } = await supabase
+            .from('customer_systems')
+            .select('monitoring_account_number')
+            .eq('site_id', selectedSiteId)
+            .not('monitoring_account_number', 'is', null)
+            .limit(1)
+            .maybeSingle();
+          if (sysData?.monitoring_account_number) {
+            prefillData.alarm_account = sysData.monitoring_account_number;
+          }
         }
 
         const { data: contactData } = await supabase

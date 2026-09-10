@@ -1,6 +1,7 @@
 import type { TemplateField } from './types';
 import SignaturePad from './SignaturePad';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Camera, Image, X, MessageSquare } from 'lucide-react';
+import { useState } from 'react';
 
 interface Props {
   field: TemplateField;
@@ -221,6 +222,9 @@ export default function FieldRenderer({ field, value, onChange, disabled, allVal
     case 'repeating_table':
       return <RepeatingTable field={field} value={value} onChange={onChange} disabled={disabled} />;
 
+    case 'photo_gallery':
+      return <PhotoGallery field={field} value={value} onChange={onChange} disabled={disabled} />;
+
     default:
       return (
         <div>
@@ -346,6 +350,156 @@ function RepeatingTable({ field, value, onChange, disabled }: {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+const DEMO_PHOTOS = [
+  { url: 'https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=400&h=300&fit=crop', label: 'Fire alarm panel front' },
+  { url: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=400&h=300&fit=crop', label: 'Wiring interior' },
+  { url: 'https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?w=400&h=300&fit=crop', label: 'Battery backup' },
+  { url: 'https://images.unsplash.com/photo-1558002038-1055907df827?w=400&h=300&fit=crop', label: 'Smoke detector ceiling' },
+  { url: 'https://images.unsplash.com/photo-1565439441965-6fcf24154938?w=400&h=300&fit=crop', label: 'Pull station hallway' },
+  { url: 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=400&h=300&fit=crop', label: 'Strobe notification' },
+];
+
+interface PhotoItem {
+  url: string;
+  caption: string;
+  timestamp: string;
+}
+
+function PhotoGallery({ field, value, onChange, disabled }: {
+  field: TemplateField;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  disabled?: boolean;
+}) {
+  const [showPicker, setShowPicker] = useState(false);
+  const [caption, setCaption] = useState('');
+  const [selectedDemo, setSelectedDemo] = useState<string | null>(null);
+
+  const photos = (Array.isArray(value) ? value : []) as PhotoItem[];
+
+  const addPhoto = () => {
+    if (!selectedDemo) return;
+    const newPhoto: PhotoItem = {
+      url: selectedDemo,
+      caption,
+      timestamp: new Date().toLocaleString(),
+    };
+    onChange([...photos, newPhoto]);
+    setShowPicker(false);
+    setCaption('');
+    setSelectedDemo(null);
+  };
+
+  const removePhoto = (idx: number) => {
+    onChange(photos.filter((_, i) => i !== idx));
+  };
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        <Camera className="inline h-4 w-4 mr-1 -mt-0.5" />
+        {field.label}
+      </label>
+
+      {photos.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
+          {photos.map((photo, idx) => (
+            <div key={idx} className="relative group rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+              <img
+                src={photo.url}
+                alt={photo.caption || `Photo ${idx + 1}`}
+                className="w-full h-28 object-cover"
+              />
+              {photo.caption && (
+                <div className="px-2 py-1.5 bg-white border-t border-gray-100">
+                  <p className="text-xs text-gray-600 line-clamp-2 flex items-start gap-1">
+                    <MessageSquare className="h-3 w-3 mt-0.5 flex-shrink-0 text-gray-400" />
+                    {photo.caption}
+                  </p>
+                </div>
+              )}
+              <div className="absolute bottom-0 right-0 px-1.5 py-0.5 bg-black/50 text-[10px] text-white rounded-tl">
+                {photo.timestamp}
+              </div>
+              {!disabled && (
+                <button
+                  type="button"
+                  onClick={() => removePhoto(idx)}
+                  className="absolute top-1 right-1 p-1 bg-black/50 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!disabled && !showPicker && (
+        <button
+          type="button"
+          onClick={() => setShowPicker(true)}
+          className="flex items-center gap-2 px-4 py-3 w-full border-2 border-dashed border-gray-200 rounded-lg text-sm text-gray-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50/30 transition-colors"
+        >
+          <Camera className="h-4 w-4" />
+          Take / Attach Photo
+        </button>
+      )}
+
+      {!disabled && showPicker && (
+        <div className="border border-blue-200 rounded-lg p-4 bg-blue-50/30 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-700">Select a Photo (Demo)</p>
+            <button type="button" onClick={() => { setShowPicker(false); setSelectedDemo(null); setCaption(''); }} className="text-gray-400 hover:text-gray-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {DEMO_PHOTOS.map((dp) => (
+              <button
+                key={dp.url}
+                type="button"
+                onClick={() => setSelectedDemo(dp.url)}
+                className={`relative rounded-lg overflow-hidden border-2 transition-all ${
+                  selectedDemo === dp.url ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <img src={dp.url} alt={dp.label} className="w-full h-16 object-cover" />
+                <p className="text-[10px] text-gray-500 px-1 py-0.5 truncate bg-white">{dp.label}</p>
+                {selectedDemo === dp.url && (
+                  <div className="absolute inset-0 bg-blue-500/20 flex items-center justify-center">
+                    <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center">
+                      <Image className="h-3 w-3 text-white" />
+                    </div>
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Caption (optional)</label>
+            <input
+              type="text"
+              value={caption}
+              onChange={e => setCaption(e.target.value)}
+              placeholder="Describe the issue or condition..."
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={addPhoto}
+            disabled={!selectedDemo}
+            className="w-full px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            Attach Photo
+          </button>
+        </div>
+      )}
     </div>
   );
 }

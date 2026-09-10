@@ -23,7 +23,7 @@ export interface TemplateSection {
 export interface TemplateField {
   id: string;
   label: string;
-  type: 'text' | 'textarea' | 'number' | 'date' | 'time' | 'select' | 'checkbox' | 'radio' | 'yes_no' | 'yes_no_na' | 'pass_fail' | 'repeating_table' | 'signature';
+  type: 'text' | 'textarea' | 'number' | 'date' | 'time' | 'select' | 'checkbox' | 'radio' | 'yes_no' | 'yes_no_na' | 'pass_fail' | 'repeating_table' | 'signature' | 'photo_gallery';
   required?: boolean;
   options?: string[];
   prefill?: string;
