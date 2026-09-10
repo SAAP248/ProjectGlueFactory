@@ -16,7 +16,7 @@ interface WorkOrderOption {
   company_id: string;
   site_id: string;
   companies: { name: string } | null;
-  sites: { name: string; address: string; city: string; state: string; zip: string; phone: string } | null;
+  sites: { name: string; address: string; city: string; state: string; zip: string } | null;
 }
 
 interface CustomerOption {
@@ -31,7 +31,6 @@ interface SiteOption {
   city: string;
   state: string;
   zip: string;
-  phone: string;
   company_id: string;
 }
 
@@ -73,7 +72,7 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
     setWoLoading(true);
     const { data } = await supabase
       .from('work_orders')
-      .select('id, wo_number, title, work_order_type, company_id, site_id, companies(name), sites(name, address, city, state, zip, phone)')
+      .select('id, wo_number, title, work_order_type, company_id, site_id, companies(name), sites(name, address, city, state, zip)')
       .in('status', ['open', 'in_progress', 'scheduled', 'pending'])
       .order('created_at', { ascending: false })
       .limit(300);
@@ -101,7 +100,7 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
     setSitesLoading(true);
     const { data } = await supabase
       .from('sites')
-      .select('id, name, address, city, state, zip, phone, company_id')
+      .select('id, name, address, city, state, zip, company_id')
       .eq('company_id', companyId)
       .order('name');
     setSites((data as SiteOption[]) || []);
@@ -178,7 +177,7 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
       prefillData.site_city = (selectedWO.sites as any)?.city || '';
       prefillData.site_state = (selectedWO.sites as any)?.state || '';
       prefillData.site_zip = (selectedWO.sites as any)?.zip || '';
-      prefillData.site_phone = (selectedWO.sites as any)?.phone || '';
+
       prefillData.site_name = selectedWO.sites?.name || '';
       prefillData.wo_number = selectedWO.wo_number;
 
@@ -223,7 +222,7 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
           prefillData.site_city = site.city || '';
           prefillData.site_state = site.state || '';
           prefillData.site_zip = site.zip || '';
-          prefillData.site_phone = site.phone || '';
+
         }
 
         const { data: contactData } = await supabase
