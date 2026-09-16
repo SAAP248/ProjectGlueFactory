@@ -7,6 +7,7 @@ import type { Site, CustomerSystem, SystemZone, SystemDevice } from './types';
 import AlarmSystemDetail from '../AlarmSystem';
 import PhotoGallery from '../Photos/PhotoGallery';
 import DocumentGallery from '../Documents/DocumentGallery';
+import SiteOverview from './SiteOverview';
 import { supabase } from '../../lib/supabase';
 
 interface SitePhotoPreview {
@@ -14,7 +15,7 @@ interface SitePhotoPreview {
   file_url: string;
 }
 
-type SiteView = { type: 'photos'; site: Site } | { type: 'documents'; site: Site };
+type SiteView = { type: 'photos'; site: Site } | { type: 'documents'; site: Site } | { type: 'overview'; site: Site };
 
 interface Props {
   companyName: string;
@@ -114,6 +115,17 @@ export default function SitesSystemsTab({ companyName, accountNumber, companySta
   }
 
   if (siteView) {
+    if (siteView.type === 'overview') {
+      return (
+        <SiteOverview
+          site={siteView.site}
+          companyName={companyName}
+          companyId={companyId || ''}
+          onBack={() => setSiteView(null)}
+        />
+      );
+    }
+
     const isPhotos = siteView.type === 'photos';
     return (
       <div>
@@ -181,7 +193,12 @@ export default function SitesSystemsTab({ companyName, accountNumber, companySta
                 </div>
                 <div className="text-left">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-gray-900">{site.name}</span>
+                    <button
+                      onClick={e => { e.stopPropagation(); setSiteView({ type: 'overview', site }); }}
+                      className="font-semibold text-gray-900 hover:text-blue-600 transition-colors"
+                    >
+                      {site.name}
+                    </button>
                     <span className={`px-2 py-0.5 text-xs rounded-full capitalize font-medium ${
                       site.site_type === 'commercial' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
                     }`}>
@@ -194,6 +211,13 @@ export default function SitesSystemsTab({ companyName, accountNumber, companySta
                 </div>
               </div>
               <div className="flex items-center gap-3">
+                <button
+                  onClick={e => { e.stopPropagation(); setSiteView({ type: 'overview', site }); }}
+                  className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full hover:bg-blue-100 transition-colors font-medium"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  View Site
+                </button>
                 {photoBySite[site.id]?.length > 0 ? (
                   <button
                     onClick={e => { e.stopPropagation(); setSiteView({ type: 'photos', site }); }}

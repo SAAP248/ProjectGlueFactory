@@ -52,6 +52,9 @@ export interface Site {
   site_type: string;
   alarm_code: string;
   access_instructions: string;
+  gate_code?: string;
+  wifi_network?: string;
+  wifi_password?: string;
 }
 
 export interface Contact {
