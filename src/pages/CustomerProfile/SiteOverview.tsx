@@ -332,9 +332,13 @@ export default function SiteOverview({ site: initialSite, companyName, companyId
         </div>
       </div>
 
-      {/* Sections */}
-      <SiteOverviewVendors siteId={site.id} vendors={vendors} onRefresh={loadSiteData} />
-      <SiteOverviewProviders siteId={site.id} providers={providers} onRefresh={loadSiteData} />
+      {/* Vendors & Providers — side by side, compact */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <SiteOverviewVendors siteId={site.id} vendors={vendors} onRefresh={loadSiteData} />
+        <SiteOverviewProviders siteId={site.id} providers={providers} onRefresh={loadSiteData} />
+      </div>
+
+      {/* Inventory */}
       <SiteOverviewInventory siteId={site.id} companyId={companyId} rooms={rooms} inventory={inventory} systems={systems} onRefresh={loadSiteData} />
     </div>
   );

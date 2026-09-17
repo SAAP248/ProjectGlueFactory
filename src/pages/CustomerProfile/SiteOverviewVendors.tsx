@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Wrench, Plus, X, Search, Droplets, Zap, Thermometer, KeyRound,
-  TreePine, Home, HardHat, Paintbrush, Phone, Mail, ExternalLink
+  TreePine, Home, HardHat, Paintbrush, Phone, Mail, ExternalLink, ChevronDown
 } from 'lucide-react';
 import type { SiteVendor } from './SiteOverview';
 import { supabase } from '../../lib/supabase';
@@ -44,6 +44,7 @@ const TRADE_COLORS: Record<string, string> = {
 const TRADE_TYPES = ['Plumber', 'Electrician', 'HVAC', 'Locksmith', 'General Contractor', 'Roofing', 'Landscaping', 'Painting', 'Other'];
 
 export default function SiteOverviewVendors({ siteId, vendors, onRefresh }: Props) {
+  const [expanded, setExpanded] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
   async function unlinkVendor(svId: string, name: string) {
@@ -52,78 +53,91 @@ export default function SiteOverviewVendors({ siteId, vendors, onRefresh }: Prop
     onRefresh();
   }
 
+  const previewNames = vendors.slice(0, 3).map(sv => sv.vendors.name);
+  const remaining = vendors.length - previewNames.length;
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-50 rounded-lg"><Wrench className="h-5 w-5 text-blue-600" /></div>
-          <div>
-            <h3 className="font-semibold text-gray-900">Vendors</h3>
-            <p className="text-xs text-gray-500">{vendors.length} vendor{vendors.length !== 1 ? 's' : ''} linked</p>
-          </div>
-        </div>
-        <button onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
-          <Plus className="h-4 w-4" /> Add Vendor
+      {/* Compact collapsible header */}
+      <div className="flex items-center gap-2 px-4 py-3">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex items-center gap-2.5 flex-1 min-w-0 group"
+        >
+          <Wrench className="h-4 w-4 text-blue-600 flex-shrink-0" />
+          <span className="font-semibold text-sm text-gray-900">Vendors</span>
+          <span className="px-1.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-full flex-shrink-0">
+            {vendors.length}
+          </span>
+          {!expanded && vendors.length > 0 && (
+            <span className="text-xs text-gray-400 truncate min-w-0">
+              {previewNames.join(', ')}{remaining > 0 ? ` +${remaining}` : ''}
+            </span>
+          )}
+          <ChevronDown className={`h-3.5 w-3.5 text-gray-400 flex-shrink-0 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+        </button>
+        <button onClick={(e) => { e.stopPropagation(); setShowModal(true); }}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors flex-shrink-0">
+          <Plus className="h-3.5 w-3.5" /> Add
         </button>
       </div>
 
-      {vendors.length > 0 ? (
-        <div className="divide-y divide-gray-50">
-          {vendors.map(sv => {
-            const v = sv.vendors;
-            const Icon = TRADE_ICONS[v.trade_type] || Wrench;
-            const color = TRADE_COLORS[v.trade_type] || TRADE_COLORS.Other;
-            return (
-              <div key={sv.id} className="px-6 py-4 flex items-start justify-between gap-4 hover:bg-gray-50 transition-colors group">
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className={`p-2 rounded-lg flex-shrink-0 ${color.split(' ')[0]}`}>
-                    <Icon className={`h-4 w-4 ${color.split(' ')[1]}`} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-gray-900 text-sm">{v.name}</span>
-                      <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${color}`}>{v.trade_type}</span>
+      {/* Expandable content */}
+      <div className={`transition-all duration-200 ease-in-out overflow-hidden ${expanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+        {vendors.length > 0 ? (
+          <div className="divide-y divide-gray-50 border-t border-gray-100">
+            {vendors.map(sv => {
+              const v = sv.vendors;
+              const Icon = TRADE_ICONS[v.trade_type] || Wrench;
+              const color = TRADE_COLORS[v.trade_type] || TRADE_COLORS.Other;
+              return (
+                <div key={sv.id} className="px-4 py-3 flex items-start justify-between gap-3 hover:bg-gray-50 transition-colors group">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div className={`p-1.5 rounded-lg flex-shrink-0 ${color.split(' ')[0]}`}>
+                      <Icon className={`h-3.5 w-3.5 ${color.split(' ')[1]}`} />
                     </div>
-                    {v.contact_name && <p className="text-xs text-gray-500 mt-0.5">{v.contact_name}</p>}
-                    <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                      {v.phone && (
-                        <a href={`tel:${v.phone}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 transition-colors">
-                          <Phone className="h-3 w-3" />{v.phone}
-                        </a>
-                      )}
-                      {v.email && (
-                        <a href={`mailto:${v.email}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 transition-colors">
-                          <Mail className="h-3 w-3" />{v.email}
-                        </a>
-                      )}
-                      {v.website && (
-                        <a href={`https://${v.website.replace(/^https?:\/\//, '')}`} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 transition-colors">
-                          <ExternalLink className="h-3 w-3" />{v.website.replace(/^https?:\/\//, '')}
-                        </a>
-                      )}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-gray-900 text-sm">{v.name}</span>
+                        <span className={`px-1.5 py-0.5 text-[11px] rounded-full font-medium ${color}`}>{v.trade_type}</span>
+                      </div>
+                      {v.contact_name && <p className="text-xs text-gray-500 mt-0.5">{v.contact_name}</p>}
+                      <div className="flex items-center gap-3 mt-1 flex-wrap">
+                        {v.phone && (
+                          <a href={`tel:${v.phone}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 transition-colors">
+                            <Phone className="h-3 w-3" />{v.phone}
+                          </a>
+                        )}
+                        {v.email && (
+                          <a href={`mailto:${v.email}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 transition-colors">
+                            <Mail className="h-3 w-3" />{v.email}
+                          </a>
+                        )}
+                        {v.website && (
+                          <a href={`https://${v.website.replace(/^https?:\/\//, '')}`} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 transition-colors">
+                            <ExternalLink className="h-3 w-3" />{v.website.replace(/^https?:\/\//, '')}
+                          </a>
+                        )}
+                      </div>
+                      {sv.notes && <p className="text-xs text-gray-400 italic mt-1">{sv.notes}</p>}
                     </div>
-                    {sv.notes && <p className="text-xs text-gray-400 italic mt-1">{sv.notes}</p>}
                   </div>
+                  <button onClick={() => unlinkVendor(sv.id, v.name)}
+                    className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-                <button onClick={() => unlinkVendor(sv.id, v.name)}
-                  className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="py-12 text-center">
-          <Wrench className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500 mb-1">No vendors linked to this site</p>
-          <button onClick={() => setShowModal(true)} className="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors">
-            Add your first vendor
-          </button>
-        </div>
-      )}
+              );
+            })}
+          </div>
+        ) : (
+          <div className="py-8 text-center border-t border-gray-100">
+            <Wrench className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+            <p className="text-sm text-gray-500">No vendors linked to this site</p>
+          </div>
+        )}
+      </div>
 
       {showModal && (
         <AddVendorModal siteId={siteId} linkedIds={new Set(vendors.map(v => v.vendor_id))}
