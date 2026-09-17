@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Package, Plus, ChevronDown, ChevronRight, Pencil, Trash2, X, Check,
   Search, Bed, Bath, Sofa, UtensilsCrossed, Monitor, Server, Car, DoorClosed,
-  Wrench, LayoutGrid, CircleDot, AlertTriangle
+  Wrench, LayoutGrid, CircleDot, AlertTriangle, GripVertical
 } from 'lucide-react';
 import type { SiteRoom, SiteInventoryItem } from './SiteOverview';
 import type { CustomerSystem } from './types';
@@ -54,6 +54,8 @@ export default function SiteOverviewInventory({ siteId, companyId, rooms, invent
   const [roomModal, setRoomModal] = useState<{ mode: 'add' | 'edit'; data: typeof emptyRoom; id?: string } | null>(null);
   const [equipModal, setEquipModal] = useState<{ mode: 'add' | 'edit'; data: typeof emptyEquip; id?: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
+  const dragItemId = useRef<string | null>(null);
 
   const toggle = (id: string) => setExpanded(prev => {
     const n = new Set(prev);
@@ -64,6 +66,42 @@ export default function SiteOverviewInventory({ siteId, companyId, rooms, invent
   const roomItems = (roomId: string) => inventory.filter(i => i.room_id === roomId);
   const unassigned = inventory.filter(i => !i.room_id);
   const systemMap = Object.fromEntries(systems.map(s => [s.id, s]));
+
+  const handleDragStart = useCallback((e: React.DragEvent, itemId: string) => {
+    dragItemId.current = itemId;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', itemId);
+    (e.currentTarget as HTMLElement).style.opacity = '0.5';
+  }, []);
+
+  const handleDragEnd = useCallback((e: React.DragEvent) => {
+    (e.currentTarget as HTMLElement).style.opacity = '1';
+    dragItemId.current = null;
+    setDragOverTarget(null);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverTarget(targetId);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent, targetId: string) => {
+    const related = e.relatedTarget as Node | null;
+    if (related && (e.currentTarget as HTMLElement).contains(related)) return;
+    setDragOverTarget(prev => prev === targetId ? null : prev);
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent, targetRoomId: string | null) => {
+    e.preventDefault();
+    setDragOverTarget(null);
+    const itemId = e.dataTransfer.getData('text/plain') || dragItemId.current;
+    if (!itemId) return;
+    const item = inventory.find(i => i.id === itemId);
+    if (!item || item.room_id === targetRoomId) return;
+    await supabase.from('site_inventory').update({ room_id: targetRoomId }).eq('id', itemId);
+    onRefresh();
+  }, [inventory, onRefresh]);
 
   async function saveRoom() {
     if (!roomModal || !roomModal.data.name.trim()) return;
@@ -146,7 +184,7 @@ export default function SiteOverviewInventory({ siteId, companyId, rooms, invent
           <div className="p-2 bg-emerald-50 rounded-lg"><Package className="h-5 w-5 text-emerald-600" /></div>
           <div>
             <h3 className="font-semibold text-gray-900">Site Inventory</h3>
-            <p className="text-xs text-gray-500">{rooms.length} room{rooms.length !== 1 ? 's' : ''}, {inventory.length} item{inventory.length !== 1 ? 's' : ''}</p>
+            <p className="text-xs text-gray-500">{rooms.length} room{rooms.length !== 1 ? 's' : ''}, {inventory.length} item{inventory.length !== 1 ? 's' : ''} &middot; Drag equipment between rooms</p>
           </div>
         </div>
         <button onClick={() => setRoomModal({ mode: 'add', data: { ...emptyRoom } })}
@@ -161,10 +199,15 @@ export default function SiteOverviewInventory({ siteId, companyId, rooms, invent
           const isOpen = expanded.has(room.id);
           const Icon = ROOM_ICON_MAP[room.room_type] || LayoutGrid;
           const color = ROOM_COLOR_MAP[room.room_type] || ROOM_COLOR_MAP.Other;
+          const isDragOver = dragOverTarget === room.id;
           return (
-            <div key={room.id} className="border border-gray-200 rounded-xl overflow-hidden">
+            <div key={room.id}
+              className={`border rounded-xl overflow-hidden transition-all duration-200 ${isDragOver ? 'border-emerald-400 ring-2 ring-emerald-100 shadow-md' : 'border-gray-200'}`}
+              onDragOver={e => handleDragOver(e, room.id)}
+              onDragLeave={e => handleDragLeave(e, room.id)}
+              onDrop={e => handleDrop(e, room.id)}>
               <button onClick={() => toggle(room.id)}
-                className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${isDragOver ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}>
                 <div className="flex items-center gap-3">
                   <div className={`p-2 rounded-lg ${color.split(' ')[0]}`}><Icon className={`h-4 w-4 ${color.split(' ')[1]}`} /></div>
                   <div className="text-left">
@@ -176,6 +219,7 @@ export default function SiteOverviewInventory({ siteId, companyId, rooms, invent
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
+                  {isDragOver && <span className="text-xs text-emerald-600 font-medium animate-pulse">Drop here</span>}
                   <span className="text-xs text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">{items.length} item{items.length !== 1 ? 's' : ''}</span>
                   {isOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
                 </div>
@@ -196,7 +240,8 @@ export default function SiteOverviewInventory({ siteId, companyId, rooms, invent
                   </div>
                   {items.length > 0 ? (
                     <div className="overflow-x-auto">
-                      <EquipmentTable items={items} systemMap={systemMap} onEdit={openEditEquip} onDelete={deleteEquip} />
+                      <EquipmentTable items={items} systemMap={systemMap} onEdit={openEditEquip} onDelete={deleteEquip}
+                        onDragStart={handleDragStart} onDragEnd={handleDragEnd} />
                     </div>
                   ) : (
                     <div className="py-8 text-center text-sm text-gray-400">No equipment in this room</div>
@@ -226,8 +271,11 @@ export default function SiteOverviewInventory({ siteId, companyId, rooms, invent
         )}
 
         {unassigned.length > 0 && (
-          <div className="border border-amber-200 rounded-xl overflow-hidden">
-            <div className="px-5 py-3 bg-amber-50 flex items-center justify-between">
+          <div className={`border rounded-xl overflow-hidden transition-all duration-200 ${dragOverTarget === '__unassigned' ? 'border-amber-400 ring-2 ring-amber-100 shadow-md' : 'border-amber-200'}`}
+            onDragOver={e => handleDragOver(e, '__unassigned')}
+            onDragLeave={e => handleDragLeave(e, '__unassigned')}
+            onDrop={e => handleDrop(e, null)}>
+            <div className={`px-5 py-3 flex items-center justify-between transition-colors ${dragOverTarget === '__unassigned' ? 'bg-amber-100' : 'bg-amber-50'}`}>
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-amber-600" />
                 <span className="font-medium text-sm text-amber-800">Unassigned Equipment</span>
@@ -237,7 +285,8 @@ export default function SiteOverviewInventory({ siteId, companyId, rooms, invent
                 className="text-xs text-amber-700 hover:text-amber-900 font-medium transition-colors">+ Add Equipment</button>
             </div>
             <div className="overflow-x-auto">
-              <EquipmentTable items={unassigned} systemMap={systemMap} onEdit={openEditEquip} onDelete={deleteEquip} />
+              <EquipmentTable items={unassigned} systemMap={systemMap} onEdit={openEditEquip} onDelete={deleteEquip}
+                onDragStart={handleDragStart} onDragEnd={handleDragEnd} />
             </div>
           </div>
         )}
@@ -259,18 +308,20 @@ export default function SiteOverviewInventory({ siteId, companyId, rooms, invent
   );
 }
 
-function EquipmentTable({ items, systemMap, onEdit, onDelete }: {
+function EquipmentTable({ items, systemMap, onEdit, onDelete, onDragStart, onDragEnd }: {
   items: SiteInventoryItem[];
   systemMap: Record<string, CustomerSystem>;
   onEdit: (item: SiteInventoryItem) => void;
   onDelete: (id: string) => void;
+  onDragStart: (e: React.DragEvent, id: string) => void;
+  onDragEnd: (e: React.DragEvent) => void;
 }) {
   return (
     <table className="w-full text-sm">
       <thead>
         <tr className="bg-gray-50 border-b border-gray-100">
+          <th className="w-10"></th>
           <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500">Product</th>
-          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500">System</th>
           <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500">Serial / MAC</th>
           <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500">Installed</th>
           <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500">Last Service</th>
@@ -282,18 +333,30 @@ function EquipmentTable({ items, systemMap, onEdit, onDelete }: {
         {items.map(item => {
           const sys = item.system_id ? systemMap[item.system_id] : null;
           return (
-            <tr key={item.id} className="hover:bg-gray-50 transition-colors group">
-              <td className="px-4 py-3">
-                <div className="font-medium text-gray-900">{item.product_name || 'Unknown'}</div>
-                {item.product_category && <div className="text-xs text-gray-500">{item.product_category}</div>}
+            <tr key={item.id}
+              draggable
+              onDragStart={e => onDragStart(e, item.id)}
+              onDragEnd={onDragEnd}
+              className="hover:bg-gray-50 transition-colors group cursor-grab active:cursor-grabbing">
+              <td className="pl-3 pr-0 py-3">
+                <GripVertical className="h-4 w-4 text-gray-300 group-hover:text-gray-500 transition-colors" />
               </td>
               <td className="px-4 py-3">
-                {sys ? (
-                  <div className="flex items-center gap-1.5">
-                    <CircleDot className="h-3 w-3 flex-shrink-0" style={{ color: sys.system_types?.color || '#6b7280' }} />
-                    <span className="text-xs text-gray-700">{sys.name}</span>
-                  </div>
-                ) : <span className="text-xs text-gray-400">--</span>}
+                <div className="flex items-center gap-2">
+                  <div className="font-medium text-gray-900">{item.product_name || 'Unknown'}</div>
+                  {sys && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border"
+                      style={{
+                        backgroundColor: (sys.system_types?.color || '#6b7280') + '18',
+                        borderColor: (sys.system_types?.color || '#6b7280') + '40',
+                        color: sys.system_types?.color || '#6b7280',
+                      }}>
+                      <CircleDot className="h-2.5 w-2.5" />
+                      {sys.name}
+                    </span>
+                  )}
+                </div>
+                {item.product_category && <div className="text-xs text-gray-500 mt-0.5">{item.product_category}</div>}
               </td>
               <td className="px-4 py-3 font-mono text-xs text-gray-600">
                 {item.serial_number && <div>{item.serial_number}</div>}
