@@ -10,6 +10,7 @@ import LeadFormModal from '../Leads/LeadFormModal';
 import NewDealWizard from '../Deals/NewDealWizard/index';
 import WorkOrderSlideOver from '../WorkOrders/WorkOrderSlideOver';
 import GoogleMap, { type MapMarker } from '../../components/GoogleMap';
+import { useAppSetting } from '../../lib/useAppSettings';
 
 interface ScheduledItem {
   id: string;
@@ -93,6 +94,7 @@ function markerColor(item: ScheduledItem): string {
 }
 
 export default function MapView() {
+  const [googleMapsKey] = useAppSetting('google_maps_api_key');
   const [range, setRange] = useState<RangeId>('today');
   const [items, setItems] = useState<ScheduledItem[]>([]);
   const [technicians, setTechnicians] = useState<TechRow[]>([]);
@@ -344,6 +346,7 @@ export default function MapView() {
               selectedId={selectedId}
               onMarkerClick={setSelectedId}
               className="absolute inset-0"
+              apiKey={googleMapsKey}
             />
 
             {/* Legend overlay */}

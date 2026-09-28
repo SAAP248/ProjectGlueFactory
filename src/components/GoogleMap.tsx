@@ -1,12 +1,12 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { Loader } from '@googlemaps/js-api-loader';
 
-const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-
 let loaderInstance: Loader | null = null;
-function getLoader() {
-  if (!loaderInstance) {
-    loaderInstance = new Loader({ apiKey: API_KEY, version: 'weekly' });
+let loaderKey = '';
+function getLoader(apiKey: string) {
+  if (!loaderInstance || loaderKey !== apiKey) {
+    loaderInstance = new Loader({ apiKey, version: 'weekly' });
+    loaderKey = apiKey;
   }
   return loaderInstance;
 }
@@ -26,7 +26,7 @@ interface GoogleMapProps {
   selectedId?: string | null;
   onMarkerClick?: (id: string) => void;
   className?: string;
-  mapId?: string;
+  apiKey?: string;
 }
 
 const DEFAULT_CENTER = { lat: 35.5, lng: -98.0 };
@@ -65,6 +65,7 @@ export default function GoogleMap({
   selectedId,
   onMarkerClick,
   className = '',
+  apiKey: apiKeyProp,
 }: GoogleMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -72,16 +73,24 @@ export default function GoogleMap({
   const [ready, setReady] = useState(false);
   const [noKey, setNoKey] = useState(false);
 
+  const resolvedKey = apiKeyProp || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+
   useEffect(() => {
-    if (!API_KEY) {
+    if (!resolvedKey) {
       setNoKey(true);
       setReady(true);
       return;
     }
+    setNoKey(false);
+    setReady(false);
+    markerRefs.current.forEach(mk => { if ('setMap' in mk) (mk as google.maps.Marker).setMap(null); });
+    markerRefs.current.clear();
+    mapRef.current = null;
+
     let cancelled = false;
     (async () => {
       try {
-        const { Map } = await getLoader().importLibrary('maps');
+        const { Map } = await getLoader(resolvedKey).importLibrary('maps');
         if (cancelled || !containerRef.current) return;
         const map = new Map(containerRef.current, {
           center: DEFAULT_CENTER,
@@ -100,7 +109,7 @@ export default function GoogleMap({
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [resolvedKey]);
 
   const syncMarkers = useCallback(() => {
     const map = mapRef.current;
@@ -232,7 +241,7 @@ function FallbackMap({
       </svg>
 
       <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-sm rounded-lg px-3 py-1.5 shadow-sm border border-gray-200 text-xs text-gray-500">
-        Add a Google Maps API key to see the real map
+        Add your Google Maps API key in Settings &rarr; Integrations
       </div>
 
       {markers.map(m => {

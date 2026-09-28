@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react';
 import {
   Settings as SettingsIcon, User, Bell, Shield as ShieldIcon, Database,
   ShieldAlert, Flame, ShieldCheck, KeyRound, Network, Tv2, DoorOpen,
-  Plus, Trash2, GripVertical, CheckCircle2, RotateCcw
+  Plus, Trash2, GripVertical, CheckCircle2, RotateCcw, Map, Eye, EyeOff,
+  ExternalLink, Check, Loader2
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAppSetting, saveAppSetting } from '../lib/useAppSettings';
 
 interface SystemType {
   id: string;
@@ -45,7 +47,7 @@ const iconComponentMap: Record<string, React.ElementType> = {
 };
 
 export default function Settings() {
-  const [activeSection, setActiveSection] = useState<'system-types' | 'go-back-reasons'>('system-types');
+  const [activeSection, setActiveSection] = useState<'system-types' | 'go-back-reasons' | 'integrations'>('integrations');
 
   const [systemTypes, setSystemTypes] = useState<SystemType[]>([]);
   const [loadingTypes, setLoadingTypes] = useState(true);
@@ -159,6 +161,17 @@ export default function Settings() {
 
       <div className="flex gap-2">
         <button
+          onClick={() => setActiveSection('integrations')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeSection === 'integrations'
+              ? 'bg-emerald-600 text-white'
+              : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          <Database className="h-4 w-4" />
+          Integrations
+        </button>
+        <button
           onClick={() => setActiveSection('system-types')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             activeSection === 'system-types'
@@ -181,6 +194,8 @@ export default function Settings() {
           Go-Back Reasons
         </button>
       </div>
+
+      {activeSection === 'integrations' && <IntegrationsPanel />}
 
       {activeSection === 'system-types' && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -415,6 +430,173 @@ export default function Settings() {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function IntegrationsPanel() {
+  const [savedKey] = useAppSetting('google_maps_api_key');
+  const [keyValue, setKeyValue] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setKeyValue(savedKey);
+  }, [savedKey]);
+
+  async function handleSave() {
+    const trimmed = keyValue.trim();
+    setSaving(true);
+    setError('');
+    setSaved(false);
+    try {
+      await saveAppSetting('google_maps_api_key', trimmed);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      setError('Failed to save. Please try again.');
+    }
+    setSaving(false);
+  }
+
+  async function handleClear() {
+    setSaving(true);
+    setError('');
+    try {
+      await saveAppSetting('google_maps_api_key', '');
+      setKeyValue('');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      setError('Failed to clear. Please try again.');
+    }
+    setSaving(false);
+  }
+
+  const hasKey = savedKey.length > 0;
+  const isDirty = keyValue.trim() !== savedKey;
+
+  return (
+    <div className="space-y-6">
+      {/* Google Maps */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-5 border-b border-gray-100">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="bg-emerald-100 p-2.5 rounded-xl">
+              <Map className="h-5 w-5 text-emerald-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-gray-900">Google Maps</h3>
+              <p className="text-sm text-gray-500">
+                Powers the interactive dispatch map with real street-level views and pin locations.
+              </p>
+            </div>
+            {hasKey ? (
+              <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-bold">
+                <Check className="h-3.5 w-3.5" />
+                Connected
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 border border-gray-200 text-gray-500 rounded-lg text-xs font-bold">
+                Not configured
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="p-6 space-y-5">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              API Key
+            </label>
+            <div className="flex gap-3">
+              <div className="relative flex-1">
+                <input
+                  type={showKey ? 'text' : 'password'}
+                  value={keyValue}
+                  onChange={e => { setKeyValue(e.target.value); setError(''); setSaved(false); }}
+                  placeholder="AIza..."
+                  className="w-full border border-gray-300 rounded-lg pl-3 pr-10 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 placeholder-gray-400"
+                />
+                <button
+                  onClick={() => setShowKey(!showKey)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  type="button"
+                >
+                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <button
+                onClick={handleSave}
+                disabled={saving || !isDirty || !keyValue.trim()}
+                className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors min-w-[100px] justify-center"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : null}
+                {saving ? 'Saving...' : saved ? 'Saved' : 'Save'}
+              </button>
+            </div>
+            {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+          </div>
+
+          {hasKey && (
+            <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+              <p className="text-xs text-gray-500">
+                The dispatch map will use this key to load interactive Google Maps.
+              </p>
+              <button
+                onClick={handleClear}
+                disabled={saving}
+                className="text-xs font-medium text-red-600 hover:text-red-700 transition-colors disabled:opacity-40"
+              >
+                Remove key
+              </button>
+            </div>
+          )}
+
+          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <p className="text-xs font-semibold text-gray-700 mb-2">How to get a Google Maps API key</p>
+            <ol className="text-xs text-gray-600 space-y-1.5 list-decimal list-inside">
+              <li>Go to the Google Cloud Console</li>
+              <li>Create a project (or select an existing one)</li>
+              <li>Enable the <span className="font-medium">Maps JavaScript API</span></li>
+              <li>Go to Credentials and create an API key</li>
+              <li>Paste it above and hit Save</li>
+            </ol>
+            <a
+              href="https://console.cloud.google.com/apis/credentials"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 mt-3 text-xs font-semibold text-emerald-700 hover:text-emerald-800 transition-colors"
+            >
+              Open Google Cloud Console
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
+        </div>
+      </div>
+
+      {/* Placeholder cards for other integrations */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {[
+          { name: 'Central Station API', desc: 'Connect to your alarm monitoring central station', icon: ShieldIcon },
+          { name: 'Accounting Software', desc: 'Sync with QuickBooks, Xero, or other platforms', icon: Database },
+          { name: 'Payment Gateway', desc: 'Accept credit card and ACH payments', icon: KeyRound },
+          { name: 'Third-Party Apps', desc: 'Connect to Zapier, webhooks, and more', icon: Network },
+        ].map(item => (
+          <div key={item.name} className="bg-white rounded-xl border border-gray-100 p-5 flex items-start gap-4 opacity-60">
+            <div className="bg-gray-100 p-2.5 rounded-xl flex-shrink-0">
+              <item.icon className="h-5 w-5 text-gray-500" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-gray-900">{item.name}</h4>
+              <p className="text-xs text-gray-500 mt-0.5">{item.desc}</p>
+              <span className="inline-block mt-2 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-gray-100 text-gray-500 rounded">Coming soon</span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
