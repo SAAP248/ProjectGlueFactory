@@ -28,16 +28,16 @@ const TILE_ATTR =
 
 function pinIcon(color: string, selected: boolean): L.DivIcon {
   const size = selected ? 36 : 24;
-  const border = selected ? 'ring-[3px] ring-white shadow-xl scale-110' : 'ring-2 ring-white/80 shadow-lg';
+  const shadow = selected
+    ? 'box-shadow:0 0 0 3px #fff,0 2px 8px rgba(0,0,0,.35);transform:scale(1.1)'
+    : 'box-shadow:0 0 0 2px rgba(255,255,255,.8),0 1px 4px rgba(0,0,0,.3)';
+  const inner = Math.round(size * 0.35);
   return L.divIcon({
     className: '',
     iconSize: [size, size],
-    iconAnchor: [size / 2, size],
-    popupAnchor: [0, -size],
-    html: `<div style="width:${size}px;height:${size}px;" class="relative flex flex-col items-center">
-      <div class="rounded-full ${border} flex items-center justify-center transition-transform" style="width:${size}px;height:${size}px;background:${color};">
-        <div class="rounded-full bg-white/90" style="width:${size * 0.35}px;height:${size * 0.35}px;"></div>
-      </div>
+    iconAnchor: [size / 2, size / 2],
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};${shadow};display:flex;align-items:center;justify-content:center;cursor:pointer;">
+      <div style="width:${inner}px;height:${inner}px;border-radius:50%;background:rgba(255,255,255,0.9);"></div>
     </div>`,
   });
 }
@@ -54,9 +54,15 @@ export default function GoogleMap({
   const markerMapRef = useRef<Map<string, L.Marker>>(new Map());
   const onMarkerClickRef = useRef(onMarkerClick);
   onMarkerClickRef.current = onMarkerClick;
+  const hasFitRef = useRef(false);
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    if (!containerRef.current) return;
+
+    if (mapRef.current) {
+      mapRef.current.invalidateSize();
+      return;
+    }
 
     const map = L.map(containerRef.current, {
       center: DEFAULT_CENTER,
@@ -71,12 +77,24 @@ export default function GoogleMap({
     markerLayerRef.current = layer;
     mapRef.current = map;
 
+    setTimeout(() => map.invalidateSize(), 100);
+    setTimeout(() => map.invalidateSize(), 300);
+
     return () => {
       map.remove();
       mapRef.current = null;
       markerLayerRef.current = null;
       markerMapRef.current.clear();
+      hasFitRef.current = false;
     };
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const ro = new ResizeObserver(() => map.invalidateSize());
+    if (containerRef.current) ro.observe(containerRef.current);
+    return () => ro.disconnect();
   }, []);
 
   const syncMarkers = useCallback(() => {
@@ -123,15 +141,21 @@ export default function GoogleMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || markers.length === 0) return;
+    if (!map || markers.length === 0 || hasFitRef.current) return;
 
-    const bounds = L.latLngBounds(markers.map(m => [m.lat, m.lng] as L.LatLngTuple));
-    if (markers.length === 1) {
+    map.invalidateSize();
+
+    const valid = markers.filter(m => m.lat && m.lng && isFinite(m.lat) && isFinite(m.lng));
+    if (valid.length === 0) return;
+
+    const bounds = L.latLngBounds(valid.map(m => [m.lat, m.lng] as L.LatLngTuple));
+    if (valid.length === 1) {
       map.setView(bounds.getCenter(), 14);
     } else {
       map.fitBounds(bounds, { padding: [50, 50] });
     }
-  }, [markers.length]);
+    hasFitRef.current = true;
+  }, [markers]);
 
   useEffect(() => {
     if (!selectedId || !mapRef.current) return;
@@ -142,8 +166,8 @@ export default function GoogleMap({
   }, [selectedId, markers]);
 
   return (
-    <div className={`relative ${className}`}>
-      <div ref={containerRef} className="absolute inset-0 z-0" />
+    <div className={`relative ${className}`} style={{ minHeight: 400 }}>
+      <div ref={containerRef} className="absolute inset-0 z-0" style={{ height: '100%', width: '100%' }} />
     </div>
   );
 }
