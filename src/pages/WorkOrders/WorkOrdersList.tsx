@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Search, Plus, Filter, Calendar, User, AlertCircle,
-  Wrench, Clock, DollarSign, LayoutList, LayoutGrid, RefreshCw,
+  Wrench, Clock, DollarSign, LayoutList, LayoutGrid, MapPin, RefreshCw,
   RotateCcw, Phone, MessageSquare, Building2, Radio, AlertTriangle,
   FileText, CheckCircle2, Receipt
 } from 'lucide-react';
+import WorkOrdersMapView from './WorkOrdersMapView';
 import { supabase } from '../../lib/supabase';
 import type { WorkOrder } from '../CustomerProfile/types';
 import WorkOrderModal from './WorkOrderModal';
@@ -135,7 +136,7 @@ export default function WorkOrdersList({ onViewDetail, initialFilter }: Props) {
   const [typeFilter, setTypeFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [goBackOnly, setGoBackOnly] = useState(false);
-  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'map'>('list');
   const [showModal, setShowModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [dateFilter] = useState<string | null>(() => {
@@ -407,14 +408,23 @@ export default function WorkOrdersList({ onViewDetail, initialFilter }: Props) {
             <button
               onClick={() => setViewMode('list')}
               className={`p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              title="List view"
             >
               <LayoutList className="h-4 w-4" />
             </button>
             <button
               onClick={() => setViewMode('kanban')}
               className={`p-1.5 rounded-md transition-colors ${viewMode === 'kanban' ? 'bg-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              title="Kanban view"
             >
               <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('map')}
+              className={`p-1.5 rounded-md transition-colors ${viewMode === 'map' ? 'bg-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              title="Map view"
+            >
+              <MapPin className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -468,6 +478,9 @@ export default function WorkOrdersList({ onViewDetail, initialFilter }: Props) {
       )}
 
       {/* Content */}
+      {viewMode === 'map' ? (
+        <WorkOrdersMapView onViewDetail={onViewDetail} />
+      ) : (
       <div className="flex-1 overflow-auto p-6">
         {loading ? (
           <div className="flex items-center justify-center h-48">
@@ -715,6 +728,8 @@ export default function WorkOrdersList({ onViewDetail, initialFilter }: Props) {
           </div>
         )}
       </div>
+
+      )}
 
       {showModal && (
         <WorkOrderModal
