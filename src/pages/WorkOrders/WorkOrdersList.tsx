@@ -485,7 +485,7 @@ export default function WorkOrdersList({ onViewDetail, initialFilter }: Props) {
             <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-600 border-t-transparent" />
           </div>
         ) : viewMode === 'list' ? (
-          <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
             {filtered.length === 0 ? (
               <div className="py-16 text-center">
                 <Wrench className="h-10 w-10 text-gray-300 mx-auto mb-3" />
@@ -499,7 +499,7 @@ export default function WorkOrdersList({ onViewDetail, initialFilter }: Props) {
                 </button>
               </div>
             ) : (
-              <table className="w-full">
+              <table className="w-full min-w-[1100px]">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
                     <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">WO #</th>
