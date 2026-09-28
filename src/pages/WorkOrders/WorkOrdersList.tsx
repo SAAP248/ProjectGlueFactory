@@ -3,7 +3,7 @@ import {
   Search, Plus, Filter, Calendar, User, AlertCircle,
   Wrench, Clock, DollarSign, LayoutList, LayoutGrid, RefreshCw,
   RotateCcw, Phone, MessageSquare, Building2, Radio, AlertTriangle,
-  FileText, CheckCircle2, XCircle, Receipt
+  FileText, CheckCircle2, Receipt
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { WorkOrder } from '../CustomerProfile/types';
@@ -110,28 +110,17 @@ function getDateBounds() {
 function getAccountingStatus(
   woId: string,
   invoiceMap: Map<string, InvoiceInfo[]>,
-  estimateWoIds: Set<string>
-): { label: string; color: string; icon: React.ElementType } | null {
+  _estimateWoIds: Set<string>
+): { label: string; color: string; icon: React.ElementType } {
   const invoices = invoiceMap.get(woId);
   if (invoices && invoices.length > 0) {
-    const hasPaid = invoices.some(i => i.status === 'paid');
-    const hasOverdue = invoices.some(i => i.status === 'overdue');
-    if (hasPaid && invoices.every(i => i.status === 'paid')) {
-      return { label: 'Paid', color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle2 };
+    const allPaid = invoices.every(i => i.status === 'paid');
+    if (allPaid) {
+      return { label: 'Invoice', color: 'bg-emerald-100 text-emerald-700', icon: Receipt };
     }
-    if (hasOverdue) {
-      return { label: 'Overdue', color: 'bg-red-100 text-red-700', icon: XCircle };
-    }
-    const hasPartial = invoices.some(i => i.status === 'partial');
-    if (hasPartial) {
-      return { label: 'Partial', color: 'bg-amber-100 text-amber-700', icon: Receipt };
-    }
-    return { label: 'Invoiced', color: 'bg-red-100 text-red-700', icon: Receipt };
+    return { label: 'Invoice', color: 'bg-red-100 text-red-700', icon: Receipt };
   }
-  if (estimateWoIds.has(woId)) {
-    return { label: 'Estimate', color: 'bg-blue-100 text-blue-600', icon: FileText };
-  }
-  return null;
+  return { label: 'Estimate', color: 'bg-blue-100 text-blue-600', icon: FileText };
 }
 
 export default function WorkOrdersList({ onViewDetail, initialFilter }: Props) {
@@ -616,16 +605,12 @@ export default function WorkOrdersList({ onViewDetail, initialFilter }: Props) {
                           )}
                         </td>
                         <td className="px-5 py-3.5">
-                          {acct ? (
-                            <div className="flex items-center gap-1.5">
-                              <acct.icon className={`h-3.5 w-3.5 ${acct.color.split(' ')[1]}`} />
-                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${acct.color}`}>
-                                {acct.label}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-gray-400">—</span>
-                          )}
+                          <div className="flex items-center gap-1.5">
+                            <acct.icon className={`h-3.5 w-3.5 ${acct.color.split(' ')[1]}`} />
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${acct.color}`}>
+                              {acct.label}
+                            </span>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -698,27 +683,23 @@ export default function WorkOrdersList({ onViewDetail, initialFilter }: Props) {
                               <User className="h-3.5 w-3.5 text-gray-300" />
                             )}
                           </div>
-                          {(wo.scheduled_date || acct) && (
-                            <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-100">
-                              {wo.scheduled_date ? (
-                                <div className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3 text-gray-400" />
-                                  <span className="text-xs text-gray-400">
-                                    {new Date(wo.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                    {wo.scheduled_time && ` ${wo.scheduled_time}`}
-                                  </span>
-                                </div>
-                              ) : <div />}
-                              {acct && (
-                                <div className="flex items-center gap-1">
-                                  <acct.icon className={`h-3 w-3 ${acct.color.split(' ')[1]}`} />
-                                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${acct.color}`}>
-                                    {acct.label}
-                                  </span>
-                                </div>
-                              )}
+                          <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-100">
+                            {wo.scheduled_date ? (
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-3 w-3 text-gray-400" />
+                                <span className="text-xs text-gray-400">
+                                  {new Date(wo.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                  {wo.scheduled_time && ` ${wo.scheduled_time}`}
+                                </span>
+                              </div>
+                            ) : <div />}
+                            <div className="flex items-center gap-1">
+                              <acct.icon className={`h-3 w-3 ${acct.color.split(' ')[1]}`} />
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${acct.color}`}>
+                                {acct.label}
+                              </span>
                             </div>
-                          )}
+                          </div>
                         </div>
                       );
                     })}
