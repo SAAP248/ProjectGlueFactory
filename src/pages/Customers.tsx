@@ -44,7 +44,7 @@ export default function Customers({ onViewCustomer }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showNewModal, setShowNewModal] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
-  const [googleMapsKey] = useAppSetting('google_maps_api_key');
+  const [googleMapsKey, keyLoading] = useAppSetting('google_maps_api_key');
 
   interface SitePin {
     id: string;
@@ -58,6 +58,7 @@ export default function Customers({ onViewCustomer }: Props) {
     isTrouble: boolean;
   }
   const [sitePins, setSitePins] = useState<SitePin[]>([]);
+  const [sitePinsLoaded, setSitePinsLoaded] = useState(false);
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -65,8 +66,8 @@ export default function Customers({ onViewCustomer }: Props) {
   }, []);
 
   useEffect(() => {
-    if (viewMode === 'map' && sitePins.length === 0) fetchSitePins();
-  }, [viewMode]);
+    if (viewMode === 'map' && !sitePinsLoaded) fetchSitePins();
+  }, [viewMode, sitePinsLoaded]);
 
   async function fetchSitePins() {
     const { data } = await supabase
@@ -87,6 +88,7 @@ export default function Customers({ onViewCustomer }: Props) {
         isTrouble: s.companies?.is_trouble_customer || false,
       })));
     }
+    setSitePinsLoaded(true);
   }
 
   const mapMarkers = useMemo<MapMarker[]>(() =>
@@ -331,13 +333,20 @@ export default function Customers({ onViewCustomer }: Props) {
 
         {viewMode === 'map' ? (
           <div className="relative" style={{ height: 'calc(100vh - 380px)', minHeight: 480 }}>
-            <GoogleMap
-              markers={mapMarkers}
-              selectedId={selectedPinId}
-              onMarkerClick={handleMapPinClick}
-              className="absolute inset-0"
-              apiKey={googleMapsKey}
-            />
+            {keyLoading || !sitePinsLoaded ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50">
+                <div className="w-10 h-10 border-[3px] border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
+                <p className="text-sm font-medium text-gray-500">Loading map data...</p>
+              </div>
+            ) : (
+              <GoogleMap
+                markers={mapMarkers}
+                selectedId={selectedPinId}
+                onMarkerClick={handleMapPinClick}
+                className="absolute inset-0"
+                apiKey={googleMapsKey}
+              />
+            )}
             <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200 p-3 min-w-[180px] z-10">
               <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Customer Sites</p>
               <div className="space-y-1.5 text-xs">
