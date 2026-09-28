@@ -4,7 +4,6 @@ import { supabase } from '../lib/supabase';
 import NewCustomerModal from './Customers/NewCustomerModal';
 import { QB_SYNC_LABELS, QB_SYNC_STYLES, formatLastSynced, type QbSyncStatus } from '../lib/quickbooks';
 import GoogleMap, { type MapMarker } from '../components/GoogleMap';
-import { useAppSetting } from '../lib/useAppSettings';
 
 interface CustomerRow {
   id: string;
@@ -44,7 +43,6 @@ export default function Customers({ onViewCustomer }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showNewModal, setShowNewModal] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
-  const [googleMapsKey, keyLoading] = useAppSetting('google_maps_api_key');
 
   interface SitePin {
     id: string;
@@ -333,7 +331,7 @@ export default function Customers({ onViewCustomer }: Props) {
 
         {viewMode === 'map' ? (
           <div className="relative" style={{ height: 'calc(100vh - 380px)', minHeight: 480 }}>
-            {keyLoading || !sitePinsLoaded ? (
+            {!sitePinsLoaded ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50">
                 <div className="w-10 h-10 border-[3px] border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
                 <p className="text-sm font-medium text-gray-500">Loading map data...</p>
@@ -344,7 +342,6 @@ export default function Customers({ onViewCustomer }: Props) {
                 selectedId={selectedPinId}
                 onMarkerClick={handleMapPinClick}
                 className="absolute inset-0"
-                apiKey={googleMapsKey}
               />
             )}
             <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200 p-3 min-w-[180px] z-10">
