@@ -1,8 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, Star, TrendingUp, TrendingDown, Phone, ChevronRight, ChevronDown, Building2, Home, AlertTriangle, Network, CornerDownRight, CheckCircle2, CircleDashed, XCircle, MinusCircle } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Search, Plus, Star, TrendingUp, TrendingDown, Phone, ChevronRight, ChevronDown, Building2, Home, AlertTriangle, Network, CornerDownRight, CheckCircle2, CircleDashed, XCircle, MinusCircle, List, MapPin } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import NewCustomerModal from './Customers/NewCustomerModal';
 import { QB_SYNC_LABELS, QB_SYNC_STYLES, formatLastSynced, type QbSyncStatus } from '../lib/quickbooks';
+import GoogleMap, { type MapMarker } from '../components/GoogleMap';
+import { useAppSetting } from '../lib/useAppSettings';
 
 interface CustomerRow {
   id: string;
@@ -41,10 +43,67 @@ export default function Customers({ onViewCustomer }: Props) {
   const [showAllLevels, setShowAllLevels] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showNewModal, setShowNewModal] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const [googleMapsKey] = useAppSetting('google_maps_api_key');
+
+  interface SitePin {
+    id: string;
+    companyId: string;
+    companyName: string;
+    siteName: string;
+    lat: number;
+    lng: number;
+    customerType: string;
+    isVip: boolean;
+    isTrouble: boolean;
+  }
+  const [sitePins, setSitePins] = useState<SitePin[]>([]);
+  const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCustomers();
   }, []);
+
+  useEffect(() => {
+    if (viewMode === 'map' && sitePins.length === 0) fetchSitePins();
+  }, [viewMode]);
+
+  async function fetchSitePins() {
+    const { data } = await supabase
+      .from('sites')
+      .select('id, name, latitude, longitude, company_id, companies(id, name, customer_type, is_vip, is_trouble_customer)')
+      .not('latitude', 'is', null)
+      .not('longitude', 'is', null);
+    if (data) {
+      setSitePins((data as any[]).map(s => ({
+        id: s.id,
+        companyId: s.companies?.id || s.company_id,
+        companyName: s.companies?.name || 'Unknown',
+        siteName: s.name || '',
+        lat: Number(s.latitude),
+        lng: Number(s.longitude),
+        customerType: s.companies?.customer_type || 'residential',
+        isVip: s.companies?.is_vip || false,
+        isTrouble: s.companies?.is_trouble_customer || false,
+      })));
+    }
+  }
+
+  const mapMarkers = useMemo<MapMarker[]>(() =>
+    sitePins.map(p => ({
+      id: p.id,
+      lat: p.lat,
+      lng: p.lng,
+      color: p.isTrouble ? '#ef4444' : p.isVip ? '#eab308' : p.customerType === 'commercial' ? '#2563eb' : '#16a34a',
+      title: `${p.companyName}${p.siteName ? ' - ' + p.siteName : ''}`,
+    })),
+  [sitePins]);
+
+  const handleMapPinClick = useCallback((id: string) => {
+    setSelectedPinId(id);
+    const pin = sitePins.find(p => p.id === id);
+    if (pin) onViewCustomer(pin.companyId);
+  }, [sitePins, onViewCustomer]);
 
   async function fetchCustomers() {
     setLoading(true);
@@ -205,6 +264,26 @@ export default function Customers({ onViewCustomer }: Props) {
               />
             </div>
             <div className="flex items-center space-x-2 flex-wrap gap-y-2">
+              <div className="flex items-center bg-gray-100 rounded-lg p-0.5 mr-1">
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                    viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <List className="h-3.5 w-3.5" />
+                  List
+                </button>
+                <button
+                  onClick={() => setViewMode('map')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                    viewMode === 'map' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <MapPin className="h-3.5 w-3.5" />
+                  Map
+                </button>
+              </div>
               <select
                 value={statusFilter}
                 onChange={e => setStatusFilter(e.target.value)}
@@ -250,7 +329,42 @@ export default function Customers({ onViewCustomer }: Props) {
           </div>
         </div>
 
-        {loading ? (
+        {viewMode === 'map' ? (
+          <div className="relative" style={{ height: 'calc(100vh - 380px)', minHeight: 480 }}>
+            <GoogleMap
+              markers={mapMarkers}
+              selectedId={selectedPinId}
+              onMarkerClick={handleMapPinClick}
+              className="absolute inset-0"
+              apiKey={googleMapsKey}
+            />
+            <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200 p-3 min-w-[180px] z-10">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Customer Sites</p>
+              <div className="space-y-1.5 text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+                  <span className="text-gray-700">Commercial</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-green-600" />
+                  <span className="text-gray-700">Residential</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
+                  <span className="text-gray-700">VIP</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                  <span className="text-gray-700">Trouble</span>
+                </div>
+              </div>
+              <div className="mt-3 pt-2 border-t border-gray-100">
+                <p className="text-xs font-semibold text-gray-900">{mapMarkers.length} sites</p>
+                <p className="text-[10px] text-gray-500">Click a pin to open the customer</p>
+              </div>
+            </div>
+          </div>
+        ) : loading ? (
           <div className="p-12 text-center text-gray-500">Loading customers...</div>
         ) : (
           <div className="overflow-x-auto">
