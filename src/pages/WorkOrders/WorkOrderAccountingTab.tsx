@@ -3,8 +3,8 @@ import {
   TrendingUp, DollarSign, FileText, CreditCard,
   AlertTriangle, Plus, X as XIcon,
   Receipt, ArrowUpRight, ArrowDownRight, Minus,
-  ChevronDown, ChevronRight, Users, Package, Clock,
-  Navigation, MapPin, CheckCircle, Truck, Save
+  ChevronDown, ChevronRight, Users, Package,
+  MapPin, CheckCircle, Truck, Save
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -255,7 +255,7 @@ export default function WorkOrderAccountingTab({ workOrder: wo, lineItems, onPay
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-4 max-w-4xl">
       {/* Profitability Overview */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -342,57 +342,54 @@ export default function WorkOrderAccountingTab({ workOrder: wo, lineItems, onPay
         {laborOpen && (
           <div className="border-t border-gray-100">
             {techEntries.length === 0 ? (
-              <div className="py-8 text-center text-sm text-gray-400">No technicians assigned</div>
+              <div className="py-6 text-center text-sm text-gray-400">No technicians assigned</div>
             ) : (
-              <div className="divide-y divide-gray-100">
+              <div className="divide-y divide-gray-50">
                 {techEntries.map(tech => {
                   const driveMin = diffMinutes(tech.enroute_at, tech.onsite_at);
                   const onsiteMin = diffMinutes(tech.onsite_at, tech.completed_at);
                   const workMin = onsiteMin !== null ? Math.max(0, onsiteMin - (tech.total_paused_minutes || 0)) : null;
                   return (
-                    <div key={tech.id} className="px-6 py-4">
-                      <div className="flex items-center justify-between mb-3">
+                    <div key={tech.id} className="px-5 py-2.5 flex items-center gap-3">
+                      <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-700 flex-shrink-0">
+                        {tech.first_name[0]}{tech.last_name[0]}
+                      </div>
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">
-                            {tech.first_name[0]}{tech.last_name[0]}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {tech.first_name} {tech.last_name}
-                              {tech.is_lead && <span className="ml-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">LEAD</span>}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {tech.scheduled_date && fmtDate(tech.scheduled_date)}
-                              <span className={`ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                                tech.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
-                                tech.status === 'onsite' ? 'bg-blue-100 text-blue-700' :
-                                tech.status === 'enroute' ? 'bg-amber-100 text-amber-700' :
-                                'bg-gray-100 text-gray-500'
-                              }`}>{tech.status}</span>
-                            </p>
-                          </div>
+                          <span className="text-sm font-semibold text-gray-900 truncate">{tech.first_name} {tech.last_name}</span>
+                          {tech.is_lead && <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex-shrink-0">LEAD</span>}
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase flex-shrink-0 ${
+                            tech.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                            tech.status === 'onsite' ? 'bg-blue-100 text-blue-700' :
+                            tech.status === 'enroute' ? 'bg-amber-100 text-amber-700' :
+                            'bg-gray-100 text-gray-500'
+                          }`}>{tech.status}</span>
+                          {tech.scheduled_date && <span className="text-[11px] text-gray-400 flex-shrink-0">{fmtDate(tech.scheduled_date)}</span>}
                         </div>
-                        <button
-                          onClick={() => openTimeEdit(tech)}
-                          className="text-xs font-medium text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
-                        >
-                          Edit Times
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-4 gap-3">
-                        <TimeCell icon={Truck} label="Drive Start" value={fmtTime(tech.enroute_at)} color="text-amber-600" bg="bg-amber-50" />
-                        <TimeCell icon={MapPin} label="On-Site" value={fmtTime(tech.onsite_at)} color="text-blue-600" bg="bg-blue-50" />
-                        <TimeCell icon={CheckCircle} label="Completed" value={fmtTime(tech.completed_at)} color="text-emerald-600" bg="bg-emerald-50" />
-                        <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-100">
-                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Duration</p>
-                          <div className="mt-1 space-y-0.5">
-                            {driveMin !== null && <p className="text-xs text-gray-600">Drive: {fmtDuration(driveMin)}</p>}
-                            {workMin !== null && <p className="text-xs text-gray-900 font-semibold">On-Site: {fmtDuration(workMin)}</p>}
-                            {!driveMin && !workMin && <p className="text-xs text-gray-400">—</p>}
-                          </div>
+                        <div className="flex items-center gap-1 mt-0.5 text-xs text-gray-500">
+                          <Truck className="h-3 w-3 text-amber-500" />
+                          <span className={tech.enroute_at ? 'text-gray-700 font-medium' : 'text-gray-300'}>{fmtTime(tech.enroute_at)}</span>
+                          <span className="text-gray-300 mx-0.5">&rarr;</span>
+                          <MapPin className="h-3 w-3 text-blue-500" />
+                          <span className={tech.onsite_at ? 'text-gray-700 font-medium' : 'text-gray-300'}>{fmtTime(tech.onsite_at)}</span>
+                          <span className="text-gray-300 mx-0.5">&rarr;</span>
+                          <CheckCircle className="h-3 w-3 text-emerald-500" />
+                          <span className={tech.completed_at ? 'text-gray-700 font-medium' : 'text-gray-300'}>{fmtTime(tech.completed_at)}</span>
+                          {(driveMin !== null || workMin !== null) && (
+                            <span className="ml-2 text-gray-400">
+                              {driveMin !== null && <span>drive {fmtDuration(driveMin)}</span>}
+                              {driveMin !== null && workMin !== null && <span> / </span>}
+                              {workMin !== null && <span className="font-semibold text-gray-600">on-site {fmtDuration(workMin)}</span>}
+                            </span>
+                          )}
                         </div>
                       </div>
+                      <button
+                        onClick={() => openTimeEdit(tech)}
+                        className="text-[11px] font-medium text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50 transition-colors flex-shrink-0"
+                      >
+                        Edit
+                      </button>
                     </div>
                   );
                 })}
@@ -756,18 +753,6 @@ export default function WorkOrderAccountingTab({ workOrder: wo, lineItems, onPay
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function TimeCell({ icon: Icon, label, value, color, bg }: { icon: React.ElementType; label: string; value: string; color: string; bg: string }) {
-  return (
-    <div className={`p-2.5 rounded-lg ${bg} border border-gray-100`}>
-      <div className="flex items-center gap-1 mb-1">
-        <Icon className={`h-3 w-3 ${color}`} />
-        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{label}</p>
-      </div>
-      <p className={`text-sm font-semibold ${value === '—' ? 'text-gray-300' : 'text-gray-800'}`}>{value}</p>
     </div>
   );
 }

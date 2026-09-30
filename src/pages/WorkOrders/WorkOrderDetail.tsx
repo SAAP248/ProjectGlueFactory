@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, CreditCard as Edit, Clock, MapPin, User, Wrench, DollarSign, Camera, FileText, ChevronDown, Plus, Trash2, AlertTriangle, CheckCircle, Navigation, Timer, CreditCard, Receipt, RotateCcw, Activity, Phone, MessageSquare, Building2, Radio, X as XIcon, ClipboardCheck, Shield, Tag, Briefcase, Link2 } from 'lucide-react';
+import { ArrowLeft, CreditCard as Edit, Clock, MapPin, User, Wrench, DollarSign, Camera, FileText, ChevronDown, Plus, Trash2, AlertTriangle, CheckCircle, Navigation, Timer, CreditCard, Receipt, RotateCcw, Activity, Phone, MessageSquare, Building2, Radio, X as XIcon, ClipboardCheck, Shield, Briefcase, Link2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { WorkOrder, WorkOrderLineItem, WorkOrderAttachment } from '../CustomerProfile/types';
 import AssignmentsCard, { TechAssignment } from './AssignmentsCard';
@@ -367,263 +367,162 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
 
   return (
     <div className="flex flex-col h-full">
-      {/* Top Bar */}
-      <div className="bg-white border-b border-gray-100 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={onBack}
-              className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
-            >
+      {/* Compact Header */}
+      <div className="bg-white border-b border-gray-200 px-5 py-3">
+        {/* Row 1: breadcrumb + actions */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition-colors flex-shrink-0">
               <ArrowLeft className="h-4 w-4" />
-              Work Orders
+              <span className="hidden sm:inline">Work Orders</span>
             </button>
             <span className="text-gray-300">/</span>
             <span className="text-sm font-semibold text-gray-900 font-mono">{wo.wo_number}</span>
+            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-semibold rounded-full ${
+              wo.work_order_type === 'installation' ? 'bg-blue-100 text-blue-700' :
+              wo.work_order_type === 'service' ? 'bg-teal-100 text-teal-700' :
+              wo.work_order_type === 'maintenance' ? 'bg-amber-100 text-amber-700' :
+              'bg-gray-100 text-gray-700'
+            }`}>
+              <Wrench className="h-3 w-3" />
+              {TYPE_LABELS[wo.work_order_type] || wo.work_order_type}
+            </span>
+            <span className={`text-xs font-semibold uppercase ${PRIORITY_STYLES[wo.priority] || 'text-gray-500'}`}>
+              {wo.priority === 'emergency' ? '! ' : ''}{wo.priority}
+            </span>
             {isGoBack && (
-              <span className="flex items-center gap-1 text-xs font-semibold text-orange-700 bg-orange-100 px-2 py-1 rounded-full">
-                <RotateCcw className="h-3 w-3" />
-                Go-Back
+              <span className="flex items-center gap-1 text-xs font-semibold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">
+                <RotateCcw className="h-3 w-3" /> Go-Back
               </span>
             )}
-            {companyTags.length > 0 && (
-              <div className="flex items-center gap-1.5">
-                <Tag className="h-3.5 w-3.5 text-gray-400" />
-                {companyTags.map(tag => (
-                  <span key={tag} className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700 border border-blue-200">{tag}</span>
-                ))}
-              </div>
-            )}
+            {companyTags.length > 0 && companyTags.map(tag => (
+              <span key={tag} className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-blue-100 text-blue-700">{tag}</span>
+            ))}
           </div>
-          <div className="flex items-center gap-3">
-            {!isGoBack && wo.status !== 'completed' && wo.status !== 'cancelled' && (
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Status Dropdown */}
+            <div className="relative">
               <button
-                onClick={openGoBackModal}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors"
+                onClick={() => setStatusOpen(!statusOpen)}
+                disabled={savingStatus}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${statusInfo.color}`}
               >
-                <RotateCcw className="h-4 w-4" />
-                Mark as Go-Back
+                {statusInfo.label}
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+              {statusOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setStatusOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden min-w-44">
+                    {STATUS_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => updateStatus(opt.value)}
+                        className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-gray-50 transition-colors ${opt.value === wo.status ? 'bg-gray-50' : ''}`}
+                      >
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ${opt.color}`}>{opt.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            {!isGoBack && wo.status !== 'completed' && wo.status !== 'cancelled' && (
+              <button onClick={openGoBackModal} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors">
+                <RotateCcw className="h-3.5 w-3.5" /> Go-Back
               </button>
             )}
             {onAddInspection && (
-              <button
-                onClick={() => onAddInspection(wo.id)}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
-              >
-                <ClipboardCheck className="h-4 w-4" />
-                Add Inspection
+              <button onClick={() => onAddInspection(wo.id)} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors">
+                <ClipboardCheck className="h-3.5 w-3.5" /> Inspection
               </button>
             )}
-            <button
-              onClick={() => onEdit(wo.id)}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <Edit className="h-4 w-4" />
-              Edit
+            <button onClick={() => onEdit(wo.id)} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+              <Edit className="h-3.5 w-3.5" /> Edit
             </button>
           </div>
         </div>
-      </div>
 
-      {/* Go-Back Banner */}
-      {isGoBack && (
-        <div className="bg-orange-50 border-b border-orange-200 px-6 py-3">
-          <div className="flex items-start gap-3">
-            <RotateCcw className="h-4 w-4 text-orange-600 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-orange-800">This is a Go-Back Job</p>
-              {(wo as any).go_back_notes && (
-                <p className="text-xs text-orange-700 mt-0.5">{(wo as any).go_back_notes}</p>
-              )}
-            </div>
+        {/* Row 2: title + meta */}
+        <div className="mt-2 flex items-baseline gap-3 min-w-0">
+          <h1 className="text-lg font-bold text-gray-900 truncate">{wo.title}</h1>
+          <div className="flex items-center gap-3 text-xs text-gray-500 flex-shrink-0 flex-wrap">
+            {(wo as any).companies && (
+              <span className="flex items-center gap-1">
+                <User className="h-3 w-3" />
+                {(wo as any).companies.name}
+                {(wo as any).companies.is_trouble_customer && (
+                  <span className="ml-0.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold text-red-700 bg-red-100 rounded-full border border-red-200">
+                    <AlertTriangle className="h-2.5 w-2.5" /> TROUBLE
+                  </span>
+                )}
+              </span>
+            )}
+            {wo.sites && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{wo.sites.name}</span>}
+            {wo.scheduled_date && (
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {new Date(wo.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                {wo.scheduled_time && ` ${wo.scheduled_time}`}
+              </span>
+            )}
+            {((wo as any).requested_by_contact_id || (wo as any).requested_by_name) && (
+              <span className="flex items-center gap-1 text-blue-600">
+                <Phone className="h-3 w-3" />
+                {(wo as any).requested_by_name || ((wo as any).requested_by_contact ? `${(wo as any).requested_by_contact.first_name} ${(wo as any).requested_by_contact.last_name}` : 'Contact')}
+              </span>
+            )}
           </div>
         </div>
-      )}
 
-      {/* Hero Header */}
-      <div className="bg-white border-b border-gray-100 px-6 py-5">
-        <div className="flex items-start justify-between gap-6">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full ${
-                wo.work_order_type === 'installation' ? 'bg-blue-100 text-blue-700' :
-                wo.work_order_type === 'service' ? 'bg-teal-100 text-teal-700' :
-                wo.work_order_type === 'maintenance' ? 'bg-amber-100 text-amber-700' :
-                'bg-gray-100 text-gray-700'
-              }`}>
-                <Wrench className="h-3 w-3" />
-                {TYPE_LABELS[wo.work_order_type] || wo.work_order_type}
-              </span>
-              <span className={`text-xs font-semibold uppercase tracking-wide ${PRIORITY_STYLES[wo.priority] || 'text-gray-500'}`}>
-                {wo.priority === 'emergency' ? '! ' : ''}{wo.priority} priority
-              </span>
-              {SourceIcon && (
-                <span className="flex items-center gap-1 text-xs text-gray-500">
-                  <SourceIcon className="h-3.5 w-3.5" />
-                  {SOURCE_LABELS[woSource]}
-                </span>
-              )}
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">{wo.title}</h1>
-            <div className="flex items-center gap-4 text-sm text-gray-500 flex-wrap">
-              {(wo as any).companies && (
-                <span className="flex items-center gap-1">
-                  <User className="h-3.5 w-3.5" />
-                  {(wo as any).companies.name}
-                  {(wo as any).companies.is_trouble_customer && (
-                    <span className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold text-red-700 bg-red-100 rounded-full border border-red-200">
-                      <AlertTriangle className="h-2.5 w-2.5" />
-                      TROUBLE
-                    </span>
-                  )}
-                </span>
-              )}
-              {wo.sites && (
-                <span className="flex items-center gap-1">
-                  <MapPin className="h-3.5 w-3.5" />
-                  {wo.sites.name}
-                </span>
-              )}
-              {wo.scheduled_date && (
-                <span className="flex items-center gap-1">
-                  <Clock className="h-3.5 w-3.5" />
-                  {new Date(wo.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  {wo.scheduled_time && ` at ${wo.scheduled_time}`}
-                </span>
-              )}
-              {((wo as any).requested_by_contact_id || (wo as any).requested_by_name) && (
-                <span className="flex items-center gap-1 text-blue-600">
-                  <Phone className="h-3.5 w-3.5" />
-                  Requested by: {(wo as any).requested_by_name || ((wo as any).requested_by_contact ? `${(wo as any).requested_by_contact.first_name} ${(wo as any).requested_by_contact.last_name}` : 'Contact')}
-                </span>
-              )}
-            </div>
+        {/* Go-Back banner inline */}
+        {isGoBack && (wo as any).go_back_notes && (
+          <div className="mt-1.5 flex items-center gap-2 text-xs text-orange-700 bg-orange-50 rounded-lg px-3 py-1.5 border border-orange-200">
+            <RotateCcw className="h-3 w-3 flex-shrink-0" />
+            <span>{(wo as any).go_back_notes}</span>
           </div>
+        )}
 
-          {/* Status Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setStatusOpen(!statusOpen)}
-              disabled={savingStatus}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${statusInfo.color}`}
-            >
-              {statusInfo.label}
-              <ChevronDown className="h-4 w-4" />
-            </button>
-            {statusOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setStatusOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden min-w-44">
-                  {STATUS_OPTIONS.map(opt => (
+        {/* Inline Time Tracking */}
+        <div className="mt-2.5 flex items-center gap-2">
+          {[
+            { key: 'enroute_at', label: 'Enroute', icon: Navigation, stampLabel: 'Start', canStamp: !wo.enroute_at, durationKey: 'enroute_duration_minutes', durationLabel: 'Drive' },
+            { key: 'onsite_at', label: 'On Site', icon: MapPin, stampLabel: 'Arrived', canStamp: wo.enroute_at && !wo.onsite_at, durationKey: 'onsite_duration_minutes', durationLabel: 'On site' },
+            { key: 'completed_at', label: 'Done', icon: Timer, stampLabel: 'Complete', canStamp: wo.onsite_at && !wo.completed_at },
+          ].map((step, i) => {
+            const ts = wo[step.key as keyof typeof wo] as string | null;
+            const dur = step.durationKey ? wo[step.durationKey as keyof typeof wo] as number | null : null;
+            return (
+              <div key={step.key} className="flex items-center gap-2">
+                {i > 0 && <div className={`w-6 h-px ${ts ? 'bg-emerald-300' : 'bg-gray-200'}`} />}
+                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
+                  ts ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-dashed border-gray-200 bg-gray-50 text-gray-400'
+                }`}>
+                  <step.icon className="h-3 w-3" />
+                  <span>{step.label}</span>
+                  {ts ? (
+                    <>
+                      <span className="font-semibold">{formatTime(ts)}</span>
+                      {dur ? <span className="text-emerald-600">({formatDuration(dur as number)})</span> : null}
+                    </>
+                  ) : step.canStamp ? (
                     <button
-                      key={opt.value}
-                      onClick={() => updateStatus(opt.value)}
-                      className={`w-full text-left px-4 py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors ${
-                        opt.value === wo.status ? 'bg-gray-50' : ''
-                      }`}
+                      onClick={() => stampTime(step.key)}
+                      className="ml-0.5 px-1.5 py-0.5 bg-blue-600 text-white rounded text-[10px] font-semibold hover:bg-blue-700 transition-colors"
                     >
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ${opt.color}`}>
-                        {opt.label}
-                      </span>
+                      {step.stampLabel}
                     </button>
-                  ))}
+                  ) : <span>—</span>}
                 </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Time Tracking Bar */}
-        <div className="mt-4 grid grid-cols-3 gap-3">
-          <div className={`relative p-3.5 rounded-xl border-2 transition-all ${
-            wo.enroute_at ? 'border-emerald-300 bg-emerald-50' : 'border-dashed border-gray-200 bg-gray-50'
-          }`}>
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2">
-                <Navigation className={`h-4 w-4 ${wo.enroute_at ? 'text-emerald-600' : 'text-gray-400'}`} />
-                <span className={`text-xs font-semibold uppercase tracking-wide ${wo.enroute_at ? 'text-emerald-700' : 'text-gray-400'}`}>
-                  Enroute
-                </span>
               </div>
-              {wo.enroute_at ? (
-                <CheckCircle className="h-4 w-4 text-emerald-500" />
-              ) : (
-                <button
-                  onClick={() => stampTime('enroute_at')}
-                  className="text-xs px-2 py-1 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 transition-colors"
-                >
-                  Start
-                </button>
-              )}
-            </div>
-            <p className={`text-sm font-medium ${wo.enroute_at ? 'text-emerald-800' : 'text-gray-400'}`}>
-              {wo.enroute_at ? formatTime(wo.enroute_at) : '—'}
-            </p>
-            {wo.enroute_duration_minutes && (
-              <p className="text-xs text-emerald-600 mt-0.5">Drive: {formatDuration(wo.enroute_duration_minutes)}</p>
-            )}
-          </div>
-
-          <div className={`relative p-3.5 rounded-xl border-2 transition-all ${
-            wo.onsite_at ? 'border-emerald-300 bg-emerald-50' : 'border-dashed border-gray-200 bg-gray-50'
-          }`}>
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2">
-                <MapPin className={`h-4 w-4 ${wo.onsite_at ? 'text-emerald-600' : 'text-gray-400'}`} />
-                <span className={`text-xs font-semibold uppercase tracking-wide ${wo.onsite_at ? 'text-emerald-700' : 'text-gray-400'}`}>
-                  On Site
-                </span>
-              </div>
-              {wo.onsite_at ? (
-                <CheckCircle className="h-4 w-4 text-emerald-500" />
-              ) : wo.enroute_at ? (
-                <button
-                  onClick={() => stampTime('onsite_at')}
-                  className="text-xs px-2 py-1 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 transition-colors"
-                >
-                  Arrived
-                </button>
-              ) : null}
-            </div>
-            <p className={`text-sm font-medium ${wo.onsite_at ? 'text-emerald-800' : 'text-gray-400'}`}>
-              {wo.onsite_at ? formatTime(wo.onsite_at) : '—'}
-            </p>
-            {wo.onsite_duration_minutes && (
-              <p className="text-xs text-emerald-600 mt-0.5">On site: {formatDuration(wo.onsite_duration_minutes)}</p>
-            )}
-          </div>
-
-          <div className={`relative p-3.5 rounded-xl border-2 transition-all ${
-            wo.completed_at ? 'border-emerald-300 bg-emerald-50' : 'border-dashed border-gray-200 bg-gray-50'
-          }`}>
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2">
-                <Timer className={`h-4 w-4 ${wo.completed_at ? 'text-emerald-600' : 'text-gray-400'}`} />
-                <span className={`text-xs font-semibold uppercase tracking-wide ${wo.completed_at ? 'text-emerald-700' : 'text-gray-400'}`}>
-                  Completed
-                </span>
-              </div>
-              {wo.completed_at ? (
-                <CheckCircle className="h-4 w-4 text-emerald-500" />
-              ) : wo.onsite_at ? (
-                <button
-                  onClick={() => stampTime('completed_at')}
-                  className="text-xs px-2 py-1 bg-emerald-600 text-white rounded-md font-medium hover:bg-emerald-700 transition-colors"
-                >
-                  Complete
-                </button>
-              ) : null}
-            </div>
-            <p className={`text-sm font-medium ${wo.completed_at ? 'text-emerald-800' : 'text-gray-400'}`}>
-              {wo.completed_at ? formatTime(wo.completed_at) : '—'}
-            </p>
-          </div>
+            );
+          })}
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="bg-white border-b border-gray-100 px-6">
-        <div className="flex gap-6">
+      <div className="bg-white border-b border-gray-100 px-5">
+        <div className="flex gap-5 -mb-px">
           {[
             { id: 'summary', label: 'Summary', icon: FileText },
             { id: 'line-items', label: `Line Items (${lineItems.length})`, icon: Receipt },
@@ -636,13 +535,13 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 py-3.5 text-sm font-medium border-b-2 transition-colors ${
+              className={`flex items-center gap-1.5 py-2.5 text-xs font-medium border-b-2 transition-colors ${
                 activeTab === tab.id
                   ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              <tab.icon className="h-4 w-4" />
+              <tab.icon className="h-3.5 w-3.5" />
               {tab.label}
             </button>
           ))}
@@ -650,7 +549,7 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
       </div>
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto px-5 py-4">
 
         {/* Summary Tab */}
         {activeTab === 'summary' && (
