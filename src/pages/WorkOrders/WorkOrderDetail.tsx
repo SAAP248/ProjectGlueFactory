@@ -964,8 +964,9 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
         {activeTab === 'accounting' && (
           <WorkOrderAccountingTab
             workOrder={wo}
-            lineItemsTotal={lineItemsTotal}
+            lineItems={lineItems}
             onPaymentRecorded={loadData}
+            onLineItemsChanged={loadData}
           />
         )}
 
