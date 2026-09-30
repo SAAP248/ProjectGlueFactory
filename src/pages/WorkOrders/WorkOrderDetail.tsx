@@ -525,10 +525,10 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
         <div className="flex gap-5 -mb-px">
           {[
             { id: 'summary', label: 'Summary', icon: FileText },
+            { id: 'systems', label: 'Systems', icon: Shield },
             { id: 'line-items', label: `Line Items (${lineItems.length})`, icon: Receipt },
             { id: 'photos', label: `Photos (${attachments.length})`, icon: Camera },
             { id: 'accounting', label: 'Accounting', icon: DollarSign },
-            { id: 'systems', label: 'Systems', icon: Shield },
             { id: 'timeline', label: 'Timeline', icon: Activity },
             { id: 'inspections', label: `Inspections (${linkedInspections.length})`, icon: ClipboardCheck },
           ].map(tab => (
