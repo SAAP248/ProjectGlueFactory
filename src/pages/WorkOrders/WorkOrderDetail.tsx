@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, CreditCard as Edit, Clock, MapPin, User, Wrench, DollarSign, Camera, FileText, ChevronDown, Plus, Trash2, AlertTriangle, CheckCircle, Navigation, Timer, CreditCard, Receipt, RotateCcw, Activity, Phone, MessageSquare, Building2, Radio, X as XIcon, ClipboardCheck } from 'lucide-react';
+import { ArrowLeft, CreditCard as Edit, Clock, MapPin, User, Wrench, DollarSign, Camera, FileText, ChevronDown, Plus, Trash2, AlertTriangle, CheckCircle, Navigation, Timer, CreditCard, Receipt, RotateCcw, Activity, Phone, MessageSquare, Building2, Radio, X as XIcon, ClipboardCheck, Shield, Tag, Briefcase, Link2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { WorkOrder, WorkOrderLineItem, WorkOrderAttachment } from '../CustomerProfile/types';
 import AssignmentsCard, { TechAssignment } from './AssignmentsCard';
+import WorkOrderAccountingTab from './WorkOrderAccountingTab';
+import WorkOrderSystemsTab from './WorkOrderSystemsTab';
 
 interface Props {
   workOrderId: string;
@@ -121,14 +123,11 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
   const [loading, setLoading] = useState(true);
   const [statusOpen, setStatusOpen] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
-  const [paymentModal, setPaymentModal] = useState(false);
+  const [companyTags, setCompanyTags] = useState<string[]>([]);
 
   const [newItem, setNewItem] = useState({ line_type: 'part', description: '', quantity: '1', unit_price: '' });
   const [addingItem, setAddingItem] = useState(false);
   const [savingItem, setSavingItem] = useState(false);
-
-  const [paymentForm, setPaymentForm] = useState({ amount: '', method: 'cash', reference: '' });
-  const [savingPayment, setSavingPayment] = useState(false);
 
   const [goBackModal, setGoBackModal] = useState(false);
   const [linkedInspections, setLinkedInspections] = useState<LinkedInspection[]>([]);
@@ -146,7 +145,7 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
         .from('work_orders')
         .select(`
           *,
-          companies(name, is_trouble_customer, trouble_notes),
+          companies(name, is_trouble_customer, trouble_notes, tags),
           sites(name, address),
           employees(first_name, last_name),
           requested_by_contact:contacts!requested_by_contact_id(first_name, last_name, title),
@@ -172,7 +171,10 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
         .order('created_at'),
     ]);
 
-    if (woRes.data) setWo(woRes.data as WorkOrder);
+    if (woRes.data) {
+      setWo(woRes.data as WorkOrder);
+      setCompanyTags((woRes.data as any).companies?.tags || []);
+    }
     if (liRes.data) setLineItems(liRes.data);
     if (attRes.data) setAttachments(attRes.data);
     setLoading(false);
@@ -341,27 +343,6 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
     setLineItems(prev => prev.filter(li => li.id !== id));
   }
 
-  async function recordPayment() {
-    if (!wo || !paymentForm.amount) return;
-    setSavingPayment(true);
-    const amount = parseFloat(paymentForm.amount);
-    await supabase
-      .from('work_orders')
-      .update({
-        payment_collected: (wo.payment_collected || 0) + amount,
-        payment_method: paymentForm.method,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', wo.id);
-    setWo(prev => prev
-      ? { ...prev, payment_collected: (prev.payment_collected || 0) + amount, payment_method: paymentForm.method }
-      : prev
-    );
-    setPaymentForm({ amount: '', method: 'cash', reference: '' });
-    setPaymentModal(false);
-    setSavingPayment(false);
-  }
-
   const lineItemsTotal = lineItems.reduce((sum, li) => sum + Number(li.total_price), 0);
   const statusInfo = STATUS_OPTIONS.find(s => s.value === wo?.status) || STATUS_OPTIONS[0];
 
@@ -404,6 +385,14 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
                 <RotateCcw className="h-3 w-3" />
                 Go-Back
               </span>
+            )}
+            {companyTags.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <Tag className="h-3.5 w-3.5 text-gray-400" />
+                {companyTags.map(tag => (
+                  <span key={tag} className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700 border border-blue-200">{tag}</span>
+                ))}
+              </div>
             )}
           </div>
           <div className="flex items-center gap-3">
@@ -481,6 +470,12 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
                 <span className="flex items-center gap-1">
                   <User className="h-3.5 w-3.5" />
                   {(wo as any).companies.name}
+                  {(wo as any).companies.is_trouble_customer && (
+                    <span className="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold text-red-700 bg-red-100 rounded-full border border-red-200">
+                      <AlertTriangle className="h-2.5 w-2.5" />
+                      TROUBLE
+                    </span>
+                  )}
                 </span>
               )}
               {wo.sites && (
@@ -633,7 +628,8 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
             { id: 'summary', label: 'Summary', icon: FileText },
             { id: 'line-items', label: `Line Items (${lineItems.length})`, icon: Receipt },
             { id: 'photos', label: `Photos (${attachments.length})`, icon: Camera },
-            { id: 'payment', label: 'Payment', icon: CreditCard },
+            { id: 'accounting', label: 'Accounting', icon: DollarSign },
+            { id: 'systems', label: 'Systems', icon: Shield },
             { id: 'timeline', label: 'Timeline', icon: Activity },
             { id: 'inspections', label: `Inspections (${linkedInspections.length})`, icon: ClipboardCheck },
           ].map(tab => (
@@ -660,6 +656,57 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
         {activeTab === 'summary' && (
           <div className="grid grid-cols-3 gap-6">
             <div className="col-span-2 space-y-5">
+              {/* Origin & Source Card */}
+              {(woSource || (wo as any).requested_by_contact_id || (wo as any).requested_by_name || (wo as any).deal_id || (wo as any).go_back_work_order_id) && (
+                <div className="bg-slate-50 rounded-xl border border-slate-200 p-5">
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">How This Job Came In</h3>
+                  <div className="flex items-center gap-4 flex-wrap">
+                    {SourceIcon && woSource && (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-slate-200">
+                        <SourceIcon className="h-4 w-4 text-slate-600" />
+                        <span className="text-sm font-medium text-slate-700">{SOURCE_LABELS[woSource]}</span>
+                      </div>
+                    )}
+                    {((wo as any).requested_by_contact_id || (wo as any).requested_by_name) && (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-slate-200">
+                        <Phone className="h-4 w-4 text-blue-500" />
+                        <span className="text-sm text-slate-700">
+                          <span className="text-slate-400">Requested by </span>
+                          <span className="font-medium">
+                            {(wo as any).requested_by_name || ((wo as any).requested_by_contact ? `${(wo as any).requested_by_contact.first_name} ${(wo as any).requested_by_contact.last_name}` : 'Contact')}
+                          </span>
+                        </span>
+                      </div>
+                    )}
+                    {(wo as any).deal_id && (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg border border-blue-200">
+                        <Briefcase className="h-4 w-4 text-blue-600" />
+                        <span className="text-sm font-medium text-blue-700">Linked to Deal</span>
+                      </div>
+                    )}
+                    {(wo as any).go_back_work_order_id && (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 rounded-lg border border-orange-200">
+                        <Link2 className="h-4 w-4 text-orange-600" />
+                        <span className="text-sm font-medium text-orange-700">Go-Back from previous WO</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Trouble Customer Warning */}
+              {(wo as any).companies?.is_trouble_customer && (
+                <div className="bg-red-50 rounded-xl border-2 border-red-200 p-4 flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold text-red-800">Trouble Customer</p>
+                    {(wo as any).companies.trouble_notes && (
+                      <p className="text-sm text-red-700 mt-0.5">{(wo as any).companies.trouble_notes}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {wo.reason_for_visit && (
                 <div className="bg-white rounded-xl border border-gray-100 p-5">
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Reason for Visit</h3>
@@ -913,55 +960,18 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
           </div>
         )}
 
-        {/* Payment Tab */}
-        {activeTab === 'payment' && (
-          <div className="max-w-lg space-y-5">
-            <div className="bg-white rounded-xl border border-gray-100 p-5">
-              <h3 className="text-sm font-semibold text-gray-700 mb-4">Payment Summary</h3>
-              <div className="space-y-3">
-                {wo.billing_type === 'fixed' && wo.fixed_amount > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Fixed Price</span>
-                    <span className="font-medium">${Number(wo.fixed_amount).toFixed(2)}</span>
-                  </div>
-                )}
-                {wo.billing_type === 'hourly' && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Hourly Rate</span>
-                    <span className="font-medium">${wo.billing_rate}/hr</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Line Items Total</span>
-                  <span className="font-medium">${lineItemsTotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm pt-2 border-t border-gray-100">
-                  <span className="text-gray-500 font-medium">Collected On-Site</span>
-                  <span className={`font-bold text-lg ${wo.payment_collected > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
-                    ${Number(wo.payment_collected || 0).toFixed(2)}
-                  </span>
-                </div>
-                {wo.payment_method && (
-                  <p className="text-xs text-gray-400">via {wo.payment_method}</p>
-                )}
-              </div>
-            </div>
+        {/* Accounting Tab */}
+        {activeTab === 'accounting' && (
+          <WorkOrderAccountingTab
+            workOrder={wo}
+            lineItemsTotal={lineItemsTotal}
+            onPaymentRecorded={loadData}
+          />
+        )}
 
-            {wo.billing_type === 'not_billable' ? (
-              <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 flex items-center gap-3">
-                <AlertTriangle className="h-5 w-5 text-gray-400 flex-shrink-0" />
-                <p className="text-sm text-gray-600">This work order is not billable. No payment will be collected.</p>
-              </div>
-            ) : (
-              <button
-                onClick={() => setPaymentModal(true)}
-                className="flex items-center gap-2 w-full justify-center px-4 py-3 text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors"
-              >
-                <DollarSign className="h-4 w-4" />
-                Record On-Site Payment
-              </button>
-            )}
-          </div>
+        {/* Systems Tab */}
+        {activeTab === 'systems' && (
+          <WorkOrderSystemsTab workOrder={wo} />
         )}
 
         {/* Timeline Tab */}
@@ -1063,89 +1073,6 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
           </div>
         )}
       </div>
-
-      {/* Payment Modal */}
-      {paymentModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setPaymentModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-semibold text-gray-900">Record Payment</h3>
-              <button onClick={() => setPaymentModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <XIcon className="h-5 w-5 text-gray-500" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={paymentForm.amount}
-                    onChange={e => setPaymentForm(p => ({ ...p, amount: e.target.value }))}
-                    className="w-full pl-7 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    autoFocus
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Method</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {['cash', 'check', 'card', 'other'].map(method => (
-                    <button
-                      key={method}
-                      onClick={() => setPaymentForm(p => ({ ...p, method }))}
-                      className={`py-2 text-sm font-medium rounded-lg capitalize transition-all border-2 ${
-                        paymentForm.method === method
-                          ? 'border-blue-500 bg-blue-50 text-blue-700'
-                          : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                      }`}
-                    >
-                      {method}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {paymentForm.method !== 'cash' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Reference #</label>
-                  <input
-                    type="text"
-                    value={paymentForm.reference}
-                    onChange={e => setPaymentForm(p => ({ ...p, reference: e.target.value }))}
-                    placeholder="Check #, transaction ID..."
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setPaymentModal(false)}
-                className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={recordPayment}
-                disabled={savingPayment || !paymentForm.amount}
-                className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-60"
-              >
-                {savingPayment ? 'Saving...' : 'Record Payment'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Mark as Go-Back Modal */}
 
       {/* Inspections Tab */}
       {activeTab === 'inspections' && (
