@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Mail, MessageSquare, FileDown, MapPin, Building2, Phone, AtSign, Shield, Package, CheckCircle2, Info, X } from 'lucide-react';
+import { Mail, MessageSquare, FileDown, MapPin, Building2, Phone, AtSign, Shield, Package, CheckCircle2, Info, X, FileText, BookOpen } from 'lucide-react';
 import type { WizardState } from './types';
 
 interface Props {
@@ -27,6 +27,7 @@ export default function Step5ReviewSend({ state, onChange, onCreateDeal, saving,
   const [emailSubject, setEmailSubject] = useState(`Your Proposal from WorkHorse Security`);
   const [emailBody, setEmailBody] = useState(`Hello,\n\nPlease review your security system proposal at the link below.\n\nProposal ID: ${proposalToken}\n\nWe look forward to working with you!`);
   const [smsBody, setSmsBody] = useState(`Hi, your WorkHorse Security proposal is ready! Proposal ID: ${proposalToken}. Reply to this message with any questions.`);
+  const docLabel = state.viewMode === 'proposal' ? 'Proposal' : 'Estimate';
 
   const totalRevenue = state.lineItems.reduce((s, i) => s + i.quantity * i.unit_price, 0);
   const totalCost = state.lineItems.reduce((s, i) => s + i.quantity * i.unit_cost, 0);
@@ -209,7 +210,32 @@ export default function Step5ReviewSend({ state, onChange, onCreateDeal, saving,
         )}
       </Section>
 
-      <Section title="Send Proposal">
+      <Section title="Send to Customer">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Send as</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5" role="radiogroup">
+          {([
+            ['estimate', 'Estimate', 'Single page with line items, totals and Accept / Decline.', FileText],
+            ['proposal', 'Proposal', 'A book: cover, About Us, scope of work, estimate, then terms.', BookOpen],
+          ] as const).map(([mode, label, desc, Icon]) => {
+            const active = state.viewMode === mode;
+            return (
+              <button
+                key={mode}
+                role="radio"
+                aria-checked={active}
+                onClick={() => onChange({ viewMode: mode })}
+                className={`flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all ${active ? 'border-blue-600 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+              >
+                <Icon className={`h-5 w-5 mt-0.5 shrink-0 ${active ? 'text-blue-600' : 'text-gray-400'}`} />
+                <span>
+                  <span className={`block text-sm font-semibold ${active ? 'text-blue-700' : 'text-gray-800'}`}>{label}</span>
+                  <span className="block text-xs text-gray-500 mt-0.5">{desc}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Delivery</p>
         <div className="grid grid-cols-3 gap-4">
           <button
             onClick={() => setSendMode(sendMode === 'email' ? null : 'email')}
@@ -220,7 +246,7 @@ export default function Step5ReviewSend({ state, onChange, onCreateDeal, saving,
             }`}
           >
             <Mail className={`h-6 w-6 ${sendMode === 'email' ? 'text-blue-600' : 'text-gray-400'}`} />
-            <span className={`text-sm font-semibold ${sendMode === 'email' ? 'text-blue-700' : 'text-gray-700'}`}>Email Proposal</span>
+            <span className={`text-sm font-semibold ${sendMode === 'email' ? 'text-blue-700' : 'text-gray-700'}`}>Email {docLabel}</span>
           </button>
 
           <button
@@ -232,7 +258,7 @@ export default function Step5ReviewSend({ state, onChange, onCreateDeal, saving,
             }`}
           >
             <MessageSquare className={`h-6 w-6 ${sendMode === 'sms' ? 'text-blue-600' : 'text-gray-400'}`} />
-            <span className={`text-sm font-semibold ${sendMode === 'sms' ? 'text-blue-700' : 'text-gray-700'}`}>Text Proposal</span>
+            <span className={`text-sm font-semibold ${sendMode === 'sms' ? 'text-blue-700' : 'text-gray-700'}`}>Text {docLabel}</span>
           </button>
 
           <button
@@ -306,10 +332,10 @@ export default function Step5ReviewSend({ state, onChange, onCreateDeal, saving,
             className="flex items-center gap-2 px-8 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
           >
             <CheckCircle2 className="h-5 w-5" />
-            {saving ? 'Creating Deal…' : sendMode ? `Create Deal & ${sendMode === 'email' ? 'Email' : 'Text'} Proposal` : 'Create Deal'}
+            {saving ? 'Creating Deal…' : sendMode ? `Create Deal & ${sendMode === 'email' ? 'Email' : 'Text'} ${docLabel}` : 'Create Deal'}
           </button>
           <div className="text-xs text-gray-500 flex flex-col justify-center">
-            <p>A deal, estimate, and proposal will be created.</p>
+            <p>A deal and its estimate will be created. The customer will see it as {state.viewMode === 'proposal' ? 'a proposal book' : 'a single-page estimate'}.</p>
             {sendMode && <p className="text-blue-600">Deal will be moved to "Proposal Sent" stage.</p>}
           </div>
         </div>

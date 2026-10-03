@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { ShieldCheck, Layers, LayoutGrid } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
+// import { useState } from 'react';
+// import { Layers, LayoutGrid } from 'lucide-react';
 import type { CustomerEstimateData, CustomerLineItem } from './api';
 import { addressLines, formatLongDate, formatMoney } from './api';
 
@@ -18,10 +19,10 @@ function groupItems(data: CustomerEstimateData, mode: Grouping) {
 
 export default function EstimateDocument({ data }: { data: CustomerEstimateData }) {
   const { estimate: est, company, site, business } = data;
-  const canToggle = data.systems.length > 0 && data.rooms.length > 0;
-  const [mode, setMode] = useState<Grouping>(
-    est.grouping_mode === 'by_room' && data.rooms.length ? 'by_room' : 'by_system'
-  );
+  // Grouping is chosen by staff when sending. Re-enable to let customers switch views.
+  // const canToggle = data.systems.length > 0 && data.rooms.length > 0;
+  // const [mode, setMode] = useState<Grouping>(...);
+  const mode: Grouping = est.grouping_mode === 'by_room' && data.rooms.length ? 'by_room' : 'by_system';
   const groups = groupItems(data, mode);
   const billTo = company
     ? addressLines({ address: company.billing_address, city: company.billing_city, state: company.billing_state, zip: company.billing_zip })
@@ -70,7 +71,7 @@ export default function EstimateDocument({ data }: { data: CustomerEstimateData 
           )}
         </section>
 
-        {canToggle && (
+        {/* {canToggle && (
           <div className="flex justify-end mb-3 print:hidden">
             <div className="inline-flex p-1 bg-slate-100 rounded-lg text-xs font-medium">
               {([['by_system', 'By System', Layers], ['by_room', 'By Room', LayoutGrid]] as const).map(([k, label, Icon]) => (
@@ -84,7 +85,7 @@ export default function EstimateDocument({ data }: { data: CustomerEstimateData 
               ))}
             </div>
           </div>
-        )}
+        )} */}
 
         <div className="rounded-xl border border-slate-200 overflow-hidden">
           <div className="overflow-x-auto">

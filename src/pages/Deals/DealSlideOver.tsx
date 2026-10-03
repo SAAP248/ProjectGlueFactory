@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   X, MessageSquare, CheckSquare, Plus, Clock, CreditCard as Edit3, Save,
   AlertCircle, Send, FileText, User, Trash2, GripVertical, ShoppingBag, Search,
-  Wrench, FolderKanban, Calendar, ChevronDown, ChevronUp, Timer, Navigation,
+  Wrench, FolderKanban, Calendar, ChevronDown, ChevronUp, Timer, Navigation, BookOpen, Eye,
 } from 'lucide-react';
 import type { Deal, Employee } from './types';
 import { useDealActivities } from './useDeals';
@@ -12,6 +12,8 @@ import {
   getStageColor, getDaysInStage, getAgingColor, formatCurrency, getWorkOrderStatusColor,
 } from './types';
 import WorkOrderModal from '../WorkOrders/WorkOrderModal';
+import SendToCustomerModal from '../Estimates/SendToCustomerModal';
+import { customerEstimateLink } from '../Estimates/useEstimates';
 import NewProjectModal from '../ProjectManagement/NewProjectModal';
 import SalesCallActions from './SalesCallActions';
 import { useDealTimeTracker } from '../../lib/useDealTimeTracker';
@@ -68,8 +70,16 @@ interface LineItem {
   isNew?: boolean;
 }
 
+interface ProposalMeta {
+  public_token: string;
+  view_mode: 'estimate' | 'proposal';
+  sent_at: string | null;
+  viewed_at: string | null;
+}
+
 function useProposal(dealId: string | null) {
   const [estimateId, setEstimateId] = useState<string | null>(null);
+  const [meta, setMeta] = useState<ProposalMeta | null>(null);
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [notes, setNotes] = useState('');
   const [terms, setTerms] = useState('');
@@ -80,7 +90,7 @@ function useProposal(dealId: string | null) {
     setLoading(true);
     const { data: est } = await supabase
       .from('estimates')
-      .select('id, notes, terms')
+      .select('id, notes, terms, public_token, view_mode, sent_at, viewed_at')
       .eq('deal_id', dealId)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -88,6 +98,7 @@ function useProposal(dealId: string | null) {
 
     if (est) {
       setEstimateId(est.id);
+      setMeta({ public_token: est.public_token, view_mode: est.view_mode, sent_at: est.sent_at, viewed_at: est.viewed_at });
       setNotes(est.notes ?? '');
       setTerms(est.terms ?? '');
       const { data: items } = await supabase
@@ -106,6 +117,7 @@ function useProposal(dealId: string | null) {
       })));
     } else {
       setEstimateId(null);
+      setMeta(null);
       setLineItems([]);
       setNotes('');
       setTerms('');
@@ -115,7 +127,7 @@ function useProposal(dealId: string | null) {
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  return { estimateId, lineItems, setLineItems, notes, setNotes, terms, setTerms, loading, refetch: fetch };
+  return { estimateId, meta, lineItems, setLineItems, notes, setNotes, terms, setTerms, loading, refetch: fetch };
 }
 
 interface DealWorkOrder {
@@ -172,7 +184,7 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
   const { products: catalogProducts, loading: catalogLoading } = useProductCatalog();
 
   const { activities, tasks, addNote, addTask, toggleTask } = useDealActivities(deal?.id ?? null);
-  const { estimateId, lineItems, setLineItems, notes, setNotes, terms, setTerms, loading: proposalLoading, refetch: refetchProposal } = useProposal(deal?.id ?? null);
+  const { estimateId, meta: proposalMeta, lineItems, setLineItems, notes, setNotes, terms, setTerms, loading: proposalLoading, refetch: refetchProposal } = useProposal(deal?.id ?? null);
   const { workOrders, loading: workOrdersLoading, refetch: refetchWorkOrders } = useDealWorkOrders(deal?.id ?? null);
   const [showCreateWO, setShowCreateWO] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
@@ -272,18 +284,23 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
     setTaskDue('');
   };
 
-  const handleSendProposal = async () => {
-    setSaving(true);
-    const now = new Date().toISOString();
+  const [sendOpen, setSendOpen] = useState(false);
+
+  const openSend = () => {
+    if (!estimateId) {
+      showToast('No proposal on this deal yet. Create one with the New Deal wizard.');
+      return;
+    }
+    setSendOpen(true);
+  };
+
+  const handleProposalSent = async (mode: 'estimate' | 'proposal') => {
     const ok = await onUpdate(deal.id, {
-      proposal_sent_date: now,
+      proposal_sent_date: new Date().toISOString(),
       sales_stage: 'Proposal Sent',
     });
-    if (ok) {
-      await addNote(deal.id, 'Proposal sent to customer.');
-      showToast('Proposal marked as sent');
-    }
-    setSaving(false);
+    if (ok) await addNote(deal.id, `${mode === 'proposal' ? 'Proposal' : 'Estimate'} sent to customer.`);
+    await refetchProposal();
   };
 
   const handleSendEAgreement = async () => {
@@ -469,12 +486,12 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
               eAgreement
             </button>
             <button
-              onClick={handleSendProposal}
+              onClick={openSend}
               disabled={saving}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
               <Send className="h-3.5 w-3.5" />
-              Send Proposal
+              Send to Customer
             </button>
             {!editing ? (
               <button onClick={() => setEditing(true)} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500 transition-colors">
@@ -799,28 +816,36 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
               ) : (
                 <>
                   {/* Proposal Link Actions */}
-                  <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold text-blue-800">Customer Proposal Link</p>
-                      <p className="text-xs text-blue-600 mt-0.5 truncate font-mono">
-                        {window.location.origin}/#/proposal/{deal.proposal_token}
+                  <div className="flex flex-wrap items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                    <div className="flex-1 min-w-[180px]">
+                      <p className="flex items-center gap-1.5 text-xs font-semibold text-blue-900">
+                        {proposalMeta?.view_mode === 'proposal' ? <BookOpen className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+                        {proposalMeta?.sent_at ? 'Sent as' : 'Will show as'} {proposalMeta?.view_mode === 'proposal' ? 'Proposal' : 'Estimate'}
+                      </p>
+                      <p className="text-xs text-blue-700 mt-0.5">
+                        {proposalMeta?.sent_at
+                          ? `Sent ${new Date(proposalMeta.sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                          : 'Not sent yet'}
+                        {' · '}
+                        {proposalMeta?.viewed_at
+                          ? `Opened ${new Date(proposalMeta.viewed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                          : 'Not opened yet'}
                       </p>
                     </div>
                     <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}/#/proposal/${deal.proposal_token}`);
-                        showToast('Link copied!');
-                      }}
-                      className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors flex-shrink-0"
+                      onClick={openSend}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors flex-shrink-0"
                     >
-                      Copy Link
+                      <Send className="h-3.5 w-3.5" /> {proposalMeta?.sent_at ? 'Change / Resend' : 'Send to Customer'}
                     </button>
-                    <button
-                      onClick={() => window.open(`/#/proposal/${deal.proposal_token}`, '_blank')}
-                      className="px-3 py-1.5 bg-white text-blue-700 text-xs font-semibold rounded-lg border border-blue-300 hover:bg-blue-50 transition-colors flex-shrink-0"
-                    >
-                      Preview
-                    </button>
+                    {proposalMeta && (
+                      <button
+                        onClick={() => window.open(`${customerEstimateLink(proposalMeta.public_token)}?preview=1`, '_blank', 'noopener')}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-blue-700 text-xs font-semibold rounded-lg border border-blue-300 hover:bg-blue-50 transition-colors flex-shrink-0"
+                      >
+                        <Eye className="h-3.5 w-3.5" /> Preview
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between">
@@ -1401,6 +1426,10 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
           <div className="w-2 h-2 rounded-full bg-emerald-400" />
           {toast}
         </div>
+      )}
+
+      {sendOpen && estimateId && (
+        <SendToCustomerModal estimateId={estimateId} onClose={() => setSendOpen(false)} onSent={handleProposalSent} />
       )}
 
       {showCreateWO && deal && (

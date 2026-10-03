@@ -1,18 +1,20 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link2, Copy, Check, Eye, FileText, BookOpen, ChevronDown, Loader2 } from 'lucide-react';
+import { Link2, Copy, Check, Eye, FileText, BookOpen, ChevronDown, Loader2, Send } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { EstimateRecord } from './useEstimates';
+import { customerEstimateLink } from './useEstimates';
 
 interface Props {
   estimate: EstimateRecord;
   onSaved: () => void;
+  onSend: () => void;
 }
 
 function formatDateTime(d: string): string {
   return new Date(d).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-export default function CustomerLinkCard({ estimate, onSaved }: Props) {
+export default function CustomerLinkCard({ estimate, onSaved, onSend }: Props) {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +29,7 @@ export default function CustomerLinkCard({ estimate, onSaved }: Props) {
     setScope(estimate.scope_of_work || '');
   }, [estimate.id, estimate.cover_title, estimate.cover_image_url, estimate.scope_of_work]);
 
-  const link = `${window.location.origin}${window.location.pathname}#/estimate/${estimate.public_token}`;
+  const link = customerEstimateLink(estimate.public_token);
   const isProposal = estimate.view_mode === 'proposal';
 
   const copy = async () => {
@@ -68,19 +70,14 @@ export default function CustomerLinkCard({ estimate, onSaved }: Props) {
         <p className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-gray-500 font-medium">
           <Link2 className="w-3.5 h-3.5" /> Customer Link
         </p>
-        <div className="inline-flex rounded-lg bg-gray-100 p-0.5" role="radiogroup" aria-label="Customer view">
-          {([['estimate', 'Estimate', FileText], ['proposal', 'Proposal', BookOpen]] as const).map(([mode, label, Icon]) => (
-            <button
-              key={mode}
-              role="radio"
-              aria-checked={estimate.view_mode === mode}
-              disabled={busy === 'mode'}
-              onClick={() => estimate.view_mode !== mode && update('mode', { view_mode: mode })}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md transition-all ${estimate.view_mode === mode ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-            >
-              <Icon className="w-3.5 h-3.5" /> {label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border ${isProposal ? 'bg-sky-50 text-sky-800 border-sky-200' : 'bg-white text-gray-700 border-gray-200'}`}>
+            {isProposal ? <BookOpen className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
+            {estimate.sent_at ? 'Sent as' : 'Shows as'} {isProposal ? 'Proposal' : 'Estimate'}
+          </span>
+          <button onClick={onSend} className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-blue-700 rounded-md hover:bg-blue-50 transition-colors">
+            <Send className="w-3.5 h-3.5" /> {estimate.sent_at ? 'Change / Resend' : 'Send'}
+          </button>
         </div>
       </div>
 
@@ -96,6 +93,7 @@ export default function CustomerLinkCard({ estimate, onSaved }: Props) {
         </div>
 
         <p className="text-xs text-gray-500">
+          {estimate.sent_at ? <>Sent <span className="font-medium text-gray-700">{formatDateTime(estimate.sent_at)}</span> &middot; </> : <>Not sent yet &middot; </>}
           {estimate.viewed_at ? (
             <>Customer first opened this on <span className="font-medium text-gray-700">{formatDateTime(estimate.viewed_at)}</span>
               {estimate.last_viewed_at && estimate.last_viewed_at !== estimate.viewed_at && <> &middot; last viewed {formatDateTime(estimate.last_viewed_at)}</>}</>

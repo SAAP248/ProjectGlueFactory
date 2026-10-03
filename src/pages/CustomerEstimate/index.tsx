@@ -9,7 +9,7 @@ import EstimateDocument from './EstimateDocument';
 import ProposalBook, { PROPOSAL_PAGES } from './ProposalBook';
 import type { ProposalPageId } from './ProposalBook';
 import ResponseSection from './ResponseSection';
-import ConversationPanel from './ConversationPanel';
+import ConversationSection, { CONVERSATION_ANCHOR } from './ConversationSection';
 
 interface Props {
   token?: string;
@@ -31,7 +31,6 @@ export default function CustomerEstimatePage({ token: initialToken, dealToken, i
   const [data, setData] = useState<CustomerEstimateData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<EstimateMessage[] | null>(null);
-  const [chatOpen, setChatOpen] = useState(false);
   const [page, setPage] = useState<ProposalPageId>(toPage(initialPage));
 
   useEffect(() => {
@@ -98,12 +97,9 @@ export default function CustomerEstimatePage({ token: initialToken, dealToken, i
       if (up.error || !up.path) return up.error;
       attachment = { path: up.path, name: input.file.name, type: input.file.type, size: input.file.size };
     }
-    const isProposal = data.estimate.view_mode === 'proposal';
     const reference = input.referenceItem
       ? { type: 'product' as const, id: input.referenceItem.id, label: input.referenceItem.description || 'Item' }
-      : isProposal && page !== 'cover'
-        ? { type: 'system' as const, id: null, label: `${PROPOSAL_PAGES.find((p) => p.id === page)?.label} page` }
-        : null;
+      : null;
     const err = await postCustomerMessage(token, { name: input.name, message: input.message, reference, attachment });
     if (!err) await loadMessages();
     return err;
@@ -149,8 +145,21 @@ export default function CustomerEstimatePage({ token: initialToken, dealToken, i
   const docLabel = isProposal ? 'Proposal' : 'Estimate';
   const staffReplies = (messages || []).filter((m) => m.sender_type === 'staff').length;
 
+  const scrollToConversation = () => {
+    const go = () => document.getElementById(CONVERSATION_ANCHOR)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (isProposal && page !== 'terms') {
+      navigate('terms');
+      window.setTimeout(go, 350);
+    } else {
+      go();
+    }
+  };
+
   const response = (
-    <ResponseSection estimate={est} preview={preview} onAccept={handleAccept} onDecline={handleDecline} onAskQuestion={() => setChatOpen(true)} />
+    <>
+      <ResponseSection estimate={est} preview={preview} onAccept={handleAccept} onDecline={handleDecline} onAskQuestion={scrollToConversation} />
+      <ConversationSection messages={messages} lineItems={data.line_items} defaultName={savedName} onSend={handleSend} />
+    </>
   );
 
   return (
@@ -176,7 +185,7 @@ export default function CustomerEstimatePage({ token: initialToken, dealToken, i
             <button onClick={() => window.print()} className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 rounded-lg hover:bg-slate-100 transition-colors">
               <Printer className="w-4 h-4" /> Print
             </button>
-            <button onClick={() => setChatOpen(true)} className="relative flex items-center gap-1.5 px-3 sm:px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm transition-colors">
+            <button onClick={scrollToConversation} className="relative flex items-center gap-1.5 px-3 sm:px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm transition-colors">
               <MessageSquare className="w-4 h-4" /> <span className="hidden sm:inline">Questions</span>
               {staffReplies > 0 && (
                 <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-teal-500 text-[11px] font-semibold flex items-center justify-center ring-2 ring-white">{staffReplies}</span>
@@ -208,16 +217,6 @@ export default function CustomerEstimatePage({ token: initialToken, dealToken, i
       <footer className="max-w-6xl mx-auto px-6 pb-10 text-center print:hidden">
         <p className="text-xs text-slate-400">Questions? Tap "Questions" at the top to message our sales team directly.</p>
       </footer>
-
-      <ConversationPanel
-        open={chatOpen}
-        onClose={() => setChatOpen(false)}
-        messages={messages}
-        lineItems={data.line_items}
-        defaultName={savedName}
-        pageLabel={isProposal && page !== 'cover' ? PROPOSAL_PAGES.find((p) => p.id === page)?.label : undefined}
-        onSend={handleSend}
-      />
     </div>
   );
 }

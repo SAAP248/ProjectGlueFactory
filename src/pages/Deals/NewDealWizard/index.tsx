@@ -102,6 +102,7 @@ function makeInitialState(companyId?: string, companyName?: string, lead?: LeadP
     systems: [],
     rooms: [],
     groupingMode: 'by_system',
+    viewMode: 'proposal',
     lineItems: [],
     marginThreshold: 30,
 
@@ -390,6 +391,8 @@ export default function NewDealWizard({ initialStage, prefilledCompanyId, prefil
         notes: state.scopeOfWork || null,
         terms: state.termsAndConditions || null,
         grouping_mode: state.groupingMode,
+        view_mode: state.viewMode,
+        sent_at: isSending ? new Date().toISOString() : null,
       }).select('id').single();
 
       // Save rooms

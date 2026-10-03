@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageSquare, Paperclip, Send, Loader2, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { MessageBubble } from '../CustomerEstimate/ConversationPanel';
+import { MessageBubble } from '../CustomerEstimate/ConversationSection';
 import type { EstimateMessage } from '../CustomerEstimate/api';
 import { subscribeToMessages, uploadEstimateFile, validateFile, formatBytes, FILE_ACCEPT } from '../CustomerEstimate/api';
 
@@ -21,14 +21,13 @@ export default function CustomerConversation({ estimateId, onRead }: Props) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const endRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     const { data, error: err } = await supabase
       .from('proposal_messages')
       .select('id, sender_type, sender_name, message, reference_type, reference_label, attachment_path, attachment_name, attachment_type, attachment_size, created_at, read_at')
       .eq('estimate_id', estimateId)
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: false });
     if (err || !data) { setLoadError(true); return; }
     setLoadError(false);
     setMessages(data as EstimateMessage[]);
@@ -44,10 +43,6 @@ export default function CustomerConversation({ estimateId, onRead }: Props) {
     load();
     return subscribeToMessages(estimateId, load);
   }, [estimateId, load]);
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [messages?.length]);
 
   const pickFile = (f: File | undefined) => {
     if (!f) return;
@@ -90,19 +85,7 @@ export default function CustomerConversation({ estimateId, onRead }: Props) {
         {messages && messages.length > 0 && <span className="text-xs font-normal text-gray-500">{messages.length} message{messages.length === 1 ? '' : 's'}</span>}
       </h3>
       <div className="rounded-xl border border-gray-200 overflow-hidden">
-        <div className="max-h-80 overflow-y-auto bg-gray-50/60 px-4 py-4 space-y-3">
-          {loadError ? (
-            <p className="text-sm text-red-600 text-center py-4">Messages could not be loaded. <button onClick={load} className="underline font-medium">Try again</button></p>
-          ) : messages === null ? (
-            <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
-          ) : messages.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-6">No questions yet. When the customer asks something from their link, it shows up here.</p>
-          ) : (
-            messages.map((m) => <MessageBubble key={m.id} msg={m} mine={m.sender_type === 'staff'} />)
-          )}
-          <div ref={endRef} />
-        </div>
-        <div className="border-t border-gray-200 bg-white p-3 space-y-2">
+        <div className="border-b border-gray-200 bg-white p-3 space-y-2">
           {error && <p className="text-xs text-red-600">{error}</p>}
           {file && (
             <div className="flex items-center justify-between gap-2 rounded-lg bg-blue-50 border border-blue-100 px-3 py-1.5 text-xs text-blue-900">
@@ -137,6 +120,17 @@ export default function CustomerConversation({ estimateId, onRead }: Props) {
               {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Send
             </button>
           </div>
+        </div>
+        <div className="max-h-80 overflow-y-auto bg-gray-50/60 px-4 py-4 space-y-3">
+          {loadError ? (
+            <p className="text-sm text-red-600 text-center py-4">Messages could not be loaded. <button onClick={load} className="underline font-medium">Try again</button></p>
+          ) : messages === null ? (
+            <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+          ) : messages.length === 0 ? (
+            <p className="text-sm text-gray-500 text-center py-6">No questions yet. When the customer asks something from their link, it shows up here.</p>
+          ) : (
+            messages.map((m) => <MessageBubble key={m.id} msg={m} mine={m.sender_type === 'staff'} />)
+          )}
         </div>
       </div>
     </section>

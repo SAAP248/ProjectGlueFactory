@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   X, FileText, Building2, MapPin, Calendar, Pencil, Printer, Copy, Receipt, Lock, Unlock,
-  Loader2, CheckCircle2, XCircle, Briefcase, AlertCircle, ArrowRight, ChevronDown,
+  Loader2, CheckCircle2, XCircle, Briefcase, AlertCircle, ArrowRight, ChevronDown, Send, BookOpen,
 } from 'lucide-react';
 import {
   fetchEstimateDetail, updateEstimateStatus, duplicateEstimate, convertEstimateToInvoice,
@@ -11,6 +11,7 @@ import type { EstimateDetailData } from './useEstimates';
 import EstimateForm from './EstimateForm';
 import CustomerLinkCard from './CustomerLinkCard';
 import CustomerConversation from './CustomerConversation';
+import SendToCustomerModal from './SendToCustomerModal';
 import { printEstimate } from './printEstimate';
 
 interface Props {
@@ -36,6 +37,7 @@ export default function EstimatePanel({
   const [unlocked, setUnlocked] = useState(false);
   const [statusMenu, setStatusMenu] = useState(false);
   const [confirmConvert, setConfirmConvert] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const open = !!estimateId;
 
@@ -54,16 +56,17 @@ export default function EstimatePanel({
     setUnlocked(false);
     setStatusMenu(false);
     setConfirmConvert(false);
+    setSending(false);
     if (estimateId) load();
     else setDetail(null);
   }, [estimateId, load]);
 
   useEffect(() => {
-    if (!open || editing || creating) return;
+    if (!open || editing || creating || sending) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, editing, creating, onClose]);
+  }, [open, editing, creating, sending, onClose]);
 
   const est = detail?.estimate;
   const converted = !!detail?.invoice;
@@ -143,6 +146,12 @@ export default function EstimatePanel({
             {converted && (
               <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-teal-100 text-teal-800">Invoiced</span>
             )}
+            {est && (
+              <span className={`hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full border ${est.view_mode === 'proposal' ? 'bg-sky-50 text-sky-800 border-sky-200' : 'bg-white text-gray-600 border-gray-200'}`}>
+                {est.view_mode === 'proposal' ? <BookOpen className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
+                {est.view_mode === 'proposal' ? 'Proposal' : 'Estimate'}
+              </span>
+            )}
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500 transition-colors" aria-label="Close">
             <X className="w-5 h-5" />
@@ -164,6 +173,12 @@ export default function EstimatePanel({
             ) : (
               <button onClick={() => setEditing(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
                 <Pencil className="w-4 h-4" /> Edit
+              </button>
+            )}
+
+            {!converted && (
+              <button onClick={() => setSending(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors">
+                <Send className="w-4 h-4" /> {est.sent_at ? 'Resend' : 'Send to Customer'}
               </button>
             )}
 
@@ -270,7 +285,7 @@ export default function EstimatePanel({
                 {detail.deal && <InfoCard icon={Briefcase} label="Linked Deal" value={detail.deal.title || 'Untitled deal'} />}
               </section>
 
-              <CustomerLinkCard estimate={est} onSaved={() => { load(); onChanged(); }} />
+              <CustomerLinkCard estimate={est} onSaved={() => { load(); onChanged(); }} onSend={() => setSending(true)} />
 
               {(est.accepted_at || est.declined_at) && (
                 <section className={`rounded-xl border p-4 ${est.declined_at && est.status === 'declined' ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'}`}>
@@ -352,6 +367,14 @@ export default function EstimatePanel({
           ) : null}
         </div>
       </aside>
+
+      {sending && est && (
+        <SendToCustomerModal
+          estimateId={est.id}
+          onClose={() => setSending(false)}
+          onSent={async () => { await load(); onChanged(); }}
+        />
+      )}
 
       <EstimateForm
         open={editing || creating}

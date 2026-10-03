@@ -92,6 +92,7 @@ export interface WizardState {
   systems: WizardSystem[];
   rooms: WizardRoom[];
   groupingMode: GroupingMode;
+  viewMode: 'estimate' | 'proposal';
 
   lineItems: WizardLineItem[];
   marginThreshold: number;

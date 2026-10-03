@@ -23,6 +23,8 @@ export interface EstimateRecord {
   customer_email_signed: string | null;
   public_token: string;
   view_mode: 'estimate' | 'proposal';
+  grouping_mode: 'by_system' | 'by_room' | null;
+  sent_at: string | null;
   viewed_at: string | null;
   last_viewed_at: string | null;
   signature_type: 'typed' | 'drawn' | null;
@@ -81,6 +83,10 @@ export const estimateStatusStyles: Record<string, string> = {
   declined: 'bg-red-100 text-red-700',
   expired: 'bg-amber-100 text-amber-800',
 };
+
+export function customerEstimateLink(publicToken: string): string {
+  return `${window.location.origin}${window.location.pathname}#/estimate/${publicToken}`;
+}
 
 export function formatMoney(n: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(n) || 0);
