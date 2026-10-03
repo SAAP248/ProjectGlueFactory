@@ -1,10 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   X, ChevronDown, Search, RotateCcw, AlertTriangle, Phone, MessageSquare,
-  Building2, Radio, UserPlus, Star, Clock, Plus, Trash2, Package, Truck,
+  Building2, Radio, UserPlus, Star, Clock, Plus, Package, Truck,
   Calendar, Sun, Moon, Tag, StickyNote, ShieldAlert, MessageCircle, DollarSign, Check,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { loadWorkOrderPrefill, acceptEstimateFromWorkOrder } from '../../lib/workOrderSource';
+import type { WorkOrderLine, WorkOrderSource } from '../../lib/workOrderSource';
+import GroupedPartsEditor from './GroupedPartsEditor';
+import ExtraVisitsEditor, { computeEndTime, visitStartTime } from './ExtraVisitsEditor';
+import type { ExtraVisit } from './ExtraVisitsEditor';
 
 interface Employee {
   id: string;
@@ -68,13 +73,7 @@ interface Product {
   price: number;
 }
 
-interface PartLineItem {
-  key: string;
-  product_id: string | null;
-  description: string;
-  quantity: number;
-  unit_price: number;
-}
+type PartLineItem = WorkOrderLine;
 
 interface TechAssignment {
   employee_id: string;
@@ -122,7 +121,8 @@ interface WorkOrderFormData {
 
 interface Props {
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (workOrder?: { id: string; wo_number: string }) => void;
+  source?: WorkOrderSource;
   prefilledCompanyId?: string;
   prefilledDealId?: string;
   prefilledSiteId?: string;
@@ -183,7 +183,7 @@ function timeToHourOffset(time: string): number {
   return h + m / 60 - HOUR_START;
 }
 
-export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, prefilledDealId, prefilledSiteId, prefilledTitle, prefilledScopeOfWork, prefilledWorkOrderType, editWorkOrderId }: Props) {
+export default function WorkOrderModal({ onClose, onSaved, source, prefilledCompanyId, prefilledDealId, prefilledSiteId, prefilledTitle, prefilledScopeOfWork, prefilledWorkOrderType, editWorkOrderId }: Props) {
   const [activeSection, setActiveSection] = useState(0);
   const [saving, setSaving] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -216,6 +216,9 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
 
   // Technician availability
   const [techAssignments, setTechAssignments] = useState<TechAssignment[]>([]);
+  const [extraVisits, setExtraVisits] = useState<ExtraVisit[]>([]);
+  const [sourceInfo, setSourceInfo] = useState<{ label: string; dealId: string | null } | null>(null);
+  const [sourceLoading, setSourceLoading] = useState(!!source);
 
   const [form, setForm] = useState<WorkOrderFormData>({
     source: 'office',
@@ -256,7 +259,28 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
   useEffect(() => {
     loadDropdownData();
     if (editWorkOrderId) loadExistingWorkOrder();
+    else if (source) loadSourcePrefill(source);
   }, []);
+
+  async function loadSourcePrefill(src: WorkOrderSource) {
+    setSourceLoading(true);
+    const { data, error: err } = await loadWorkOrderPrefill(src);
+    setSourceLoading(false);
+    if (err || !data) { setError(err || 'Could not load the source document'); return; }
+    const lineTotal = data.lines.reduce((s, l) => s + l.quantity * l.unit_price, 0);
+    setSourceInfo({ label: data.sourceLabel, dealId: data.dealId });
+    setParts(data.lines);
+    setForm(prev => ({
+      ...prev,
+      company_id: data.companyId || prev.company_id,
+      site_id: data.siteId || prev.site_id,
+      title: data.title,
+      scope_of_work: data.scopeOfWork,
+      work_order_type: 'installation',
+      billing_type: 'fixed',
+      fixed_amount: lineTotal > 0 ? lineTotal.toFixed(2) : prev.fixed_amount,
+    }));
+  }
 
   useEffect(() => {
     if (form.company_id) {
@@ -384,10 +408,34 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
 
   async function loadExistingWorkOrder() {
     const { data } = await supabase
-      .from('work_orders').select('*, work_order_technicians(employee_id, is_lead)').eq('id', editWorkOrderId).maybeSingle();
+      .from('work_orders').select('*, work_order_technicians(employee_id, is_lead, visit_sequence, scheduled_date, scheduled_start_time, estimated_duration_minutes)').eq('id', editWorkOrderId).maybeSingle();
     if (data) {
-      const techs = data.work_order_technicians || [];
-      const lead = techs.find((t: any) => t.is_lead);
+      const allTechs: any[] = data.work_order_technicians || [];
+      const techs = allTechs.filter(t => (t.visit_sequence ?? 1) <= 1);
+      const lead = allTechs.find((t: any) => t.is_lead);
+      const mainCrewIds = techs.map((t: any) => t.employee_id);
+      const seqs = [...new Set(allTechs.filter(t => t.visit_sequence > 1).map(t => t.visit_sequence as number))].sort((a, b) => a - b);
+      setExtraVisits(seqs.map(seq => {
+        const rows = allTechs.filter(t => t.visit_sequence === seq);
+        const first = rows[0];
+        const start = (first.scheduled_start_time || '').slice(0, 5);
+        const crew = rows.map(r => r.employee_id);
+        const sameAsMain = crew.length === mainCrewIds.length && crew.every(id => mainCrewIds.includes(id));
+        return {
+          key: crypto.randomUUID(),
+          date: first.scheduled_date || '',
+          time_block: start === '08:00' ? 'am' : start === '12:00' ? 'pm' : 'specific',
+          time: start,
+          duration: String(first.estimated_duration_minutes || 240),
+          crew: sameAsMain ? null : crew,
+        } as ExtraVisit;
+      }));
+      if (data.source_estimate_id || data.source_invoice_id) {
+        const { data: src } = data.source_estimate_id
+          ? await supabase.from('estimates').select('estimate_number').eq('id', data.source_estimate_id).maybeSingle()
+          : await supabase.from('invoices').select('invoice_number').eq('id', data.source_invoice_id).maybeSingle();
+        if (src) setSourceInfo({ label: data.source_estimate_id ? `Estimate #${(src as any).estimate_number}` : `Invoice #${(src as any).invoice_number}`, dealId: data.deal_id });
+      }
       setForm({
         source: data.source || 'office',
         company_id: data.company_id || '',
@@ -410,7 +458,7 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
         time_block: data.time_block || 'am',
         estimated_duration: data.estimated_duration?.toString() || '240',
         notes: data.notes || '',
-        technician_ids: techs.map((t: any) => t.employee_id),
+        technician_ids: mainCrewIds,
         lead_technician_id: lead?.employee_id || '',
         assign_date_only: false,
         is_go_back: data.is_go_back || false,
@@ -433,14 +481,22 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
         .select('*')
         .eq('work_order_id', editWorkOrderId)
         .eq('line_type', 'part')
+        .order('group_sort')
+        .order('sort_order')
         .order('created_at');
       if (lineItems) {
         setParts(lineItems.map((li: any) => ({
           key: li.id,
+          id: li.id,
           product_id: li.product_id,
           description: li.description,
-          quantity: li.quantity || 1,
-          unit_price: li.unit_price || 0,
+          quantity: Number(li.quantity) || 1,
+          unit_price: Number(li.unit_price) || 0,
+          cost_price: Number(li.cost_price) || 0,
+          group_key: li.group_key,
+          group_label: li.group_label,
+          group_sort: li.group_sort ?? 0,
+          source_line_item_id: li.source_line_item_id,
         })));
       }
     }
@@ -504,25 +560,29 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
   }
 
   function addProductToParts(product: Product) {
-    setParts(prev => [...prev, {
-      key: crypto.randomUUID(),
-      product_id: product.id,
-      description: product.name,
-      quantity: 1,
-      unit_price: product.price,
-    }]);
+    setParts(prev => [...prev, newLine({ product_id: product.id, description: product.name, unit_price: product.price, cost_price: product.cost || 0 })]);
     setRecentlyAdded(prev => new Set(prev).add(product.id));
     setTimeout(() => setRecentlyAdded(prev => { const n = new Set(prev); n.delete(product.id); return n; }), 1500);
   }
 
   function addCustomPart() {
-    setParts(prev => [...prev, {
+    setParts(prev => [...prev, newLine({})]);
+  }
+
+  function newLine(fields: Partial<PartLineItem>): PartLineItem {
+    return {
       key: crypto.randomUUID(),
       product_id: null,
       description: '',
       quantity: 1,
       unit_price: 0,
-    }]);
+      cost_price: 0,
+      group_key: null,
+      group_label: null,
+      group_sort: 10000,
+      source_line_item_id: null,
+      ...fields,
+    };
   }
 
   function updatePart(key: string, field: keyof PartLineItem, value: any) {
@@ -599,19 +659,23 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
         go_back_notes: form.is_go_back ? form.go_back_notes || null : null,
         go_back_work_order_id: form.is_go_back && form.go_back_work_order_id ? form.go_back_work_order_id : null,
         updated_at: new Date().toISOString(),
-        ...(prefilledDealId && !editWorkOrderId ? { deal_id: prefilledDealId } : {}),
+        ...((prefilledDealId || sourceInfo?.dealId) && !editWorkOrderId ? { deal_id: prefilledDealId || sourceInfo?.dealId } : {}),
+        ...(source && !editWorkOrderId ? (source.type === 'estimate' ? { source_estimate_id: source.id } : { source_invoice_id: source.id }) : {}),
       };
 
       let workOrderId = editWorkOrderId;
+      let woNumber = '';
 
       if (editWorkOrderId) {
-        const { error: updateErr } = await supabase.from('work_orders').update(payload).eq('id', editWorkOrderId);
+        const { data: updated, error: updateErr } = await supabase.from('work_orders').update(payload).eq('id', editWorkOrderId).select('wo_number').maybeSingle();
         if (updateErr) throw updateErr;
+        woNumber = updated?.wo_number || '';
       } else {
         payload.wo_number = generateWoNumber();
-        const { data: inserted, error: insertErr } = await supabase.from('work_orders').insert(payload).select('id').single();
+        const { data: inserted, error: insertErr } = await supabase.from('work_orders').insert(payload).select('id, wo_number').single();
         if (insertErr) throw insertErr;
         workOrderId = inserted.id;
+        woNumber = inserted.wo_number;
       }
 
       if (workOrderId) {
@@ -619,46 +683,78 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
         if (editWorkOrderId) {
           await supabase.from('work_order_technicians').delete().eq('work_order_id', workOrderId);
         }
-        if (!form.assign_date_only && form.technician_ids.length > 0) {
+        if (!form.assign_date_only) {
           const durationMinutes = parseInt(form.estimated_duration) || 240;
           const startTime = form.scheduled_time || null;
-          let endTime: string | null = null;
-          if (startTime) {
-            const [h, m] = startTime.split(':').map(Number);
-            const total = h * 60 + m + durationMinutes;
-            const nh = Math.floor(total / 60) % 24;
-            const nm = total % 60;
-            endTime = `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`;
-          }
-          await supabase.from('work_order_technicians').insert(
-            form.technician_ids.map(empId => ({
+          const rows = form.technician_ids.map(empId => ({
+            work_order_id: workOrderId,
+            employee_id: empId,
+            is_lead: empId === form.lead_technician_id,
+            scheduled_date: form.scheduled_date || null,
+            scheduled_start_time: startTime,
+            scheduled_end_time: computeEndTime(startTime, durationMinutes),
+            estimated_duration_minutes: durationMinutes,
+            visit_sequence: 1,
+          }));
+          extraVisits.filter(v => v.date).forEach((v, i) => {
+            const dur = parseInt(v.duration) || 240;
+            const start = visitStartTime(v);
+            (v.crew ?? form.technician_ids).forEach(empId => rows.push({
               work_order_id: workOrderId,
               employee_id: empId,
               is_lead: empId === form.lead_technician_id,
-              scheduled_date: form.scheduled_date || null,
-              scheduled_start_time: startTime,
-              scheduled_end_time: endTime,
-              estimated_duration_minutes: durationMinutes,
-            }))
-          );
+              scheduled_date: v.date,
+              scheduled_start_time: start,
+              scheduled_end_time: computeEndTime(start, dur),
+              estimated_duration_minutes: dur,
+              visit_sequence: i + 2,
+            }));
+          });
+          if (rows.length > 0) {
+            const { error: techErr } = await supabase.from('work_order_technicians').insert(rows);
+            if (techErr) throw techErr;
+          }
         }
 
         // Parts / line items
+        const keptParts = parts.filter(p => p.description.trim());
+        const lineRow = (p: PartLineItem, idx: number) => ({
+          work_order_id: workOrderId,
+          product_id: p.product_id || null,
+          line_type: 'part',
+          description: p.description,
+          quantity: p.quantity,
+          unit_price: p.unit_price,
+          total_price: p.quantity * p.unit_price,
+          cost_price: p.cost_price,
+          sort_order: idx,
+          group_key: p.group_key,
+          group_label: p.group_label,
+          group_sort: p.group_sort,
+          source_line_item_id: p.source_line_item_id,
+          updated_at: new Date().toISOString(),
+        });
         if (editWorkOrderId) {
-          await supabase.from('work_order_line_items').delete().eq('work_order_id', workOrderId).eq('line_type', 'part');
+          const keepIds = keptParts.map(p => p.id).filter(Boolean) as string[];
+          let del = supabase.from('work_order_line_items').delete().eq('work_order_id', workOrderId).eq('line_type', 'part');
+          if (keepIds.length > 0) del = del.not('id', 'in', `(${keepIds.join(',')})`);
+          const { error: delErr } = await del;
+          if (delErr) throw delErr;
+          for (const [idx, p] of keptParts.entries()) {
+            if (!p.id) continue;
+            const { error: upErr } = await supabase.from('work_order_line_items').update(lineRow(p, idx)).eq('id', p.id);
+            if (upErr) throw upErr;
+          }
         }
-        if (parts.length > 0) {
-          await supabase.from('work_order_line_items').insert(
-            parts.filter(p => p.description.trim()).map(p => ({
-              work_order_id: workOrderId,
-              product_id: p.product_id || null,
-              line_type: 'part',
-              description: p.description,
-              quantity: p.quantity,
-              unit_price: p.unit_price,
-              unit_cost: 0,
-            }))
-          );
+        const newParts = keptParts.map((p, idx) => ({ p, idx })).filter(({ p }) => !p.id);
+        if (newParts.length > 0) {
+          const { error: lineErr } = await supabase.from('work_order_line_items').insert(newParts.map(({ p, idx }) => lineRow(p, idx)));
+          if (lineErr) throw lineErr;
+        }
+
+        if (source?.type === 'estimate' && !editWorkOrderId) {
+          const acceptErr = await acceptEstimateFromWorkOrder(source.id, workOrderId);
+          if (acceptErr) throw new Error(`Work order saved, but the estimate could not be marked accepted: ${acceptErr}`);
         }
 
         // SMS notification log
@@ -675,7 +771,7 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
         }
       }
 
-      onSaved();
+      onSaved(workOrderId ? { id: workOrderId, wo_number: woNumber } : undefined);
       onClose();
     } catch (err: any) {
       setError(err.message || 'Failed to save work order');
@@ -724,7 +820,9 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">{editWorkOrderId ? 'Edit Work Order' : 'New Work Order'}</h2>
-            <p className="text-sm text-gray-500 mt-0.5">{editWorkOrderId ? 'Update work order details' : 'Create a new service ticket'}</p>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {sourceInfo ? <>From <span className="font-medium text-blue-700">{sourceInfo.label}</span>{sourceLoading ? '' : ` · ${parts.length} item${parts.length !== 1 ? 's' : ''}`}</> : editWorkOrderId ? 'Update work order details' : 'Create a new service ticket'}
+            </p>
           </div>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
             <X className="h-5 w-5 text-gray-500" />
@@ -1374,6 +1472,15 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
                       </p>
                     </div>
                   )}
+
+                  <ExtraVisitsEditor
+                    visits={extraVisits}
+                    onChange={setExtraVisits}
+                    mainCrew={form.technician_ids}
+                    mainDate={form.scheduled_date}
+                    employees={employees.filter(emp => form.technician_ids.includes(emp.id) || /tech|field|install/i.test(emp.role))}
+                    excludeWorkOrderId={editWorkOrderId}
+                  />
                 </>
               )}
 
@@ -1518,44 +1625,7 @@ export default function WorkOrderModal({ onClose, onSaved, prefilledCompanyId, p
                 )}
 
                 {parts.length > 0 && (
-                  <div className="space-y-2">
-                    {parts.map(part => (
-                      <div key={part.key} className="flex items-center gap-2 p-2.5 bg-white border border-gray-200 rounded-lg">
-                        <input
-                          type="text"
-                          value={part.description}
-                          onChange={e => updatePart(part.key, 'description', e.target.value)}
-                          placeholder="Part description"
-                          className="flex-1 px-2 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                        <input
-                          type="number"
-                          min="1"
-                          value={part.quantity}
-                          onChange={e => updatePart(part.key, 'quantity', parseFloat(e.target.value) || 1)}
-                          className="w-16 px-2 py-1.5 border border-gray-200 rounded text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                        <div className="relative w-24">
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">$</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={part.unit_price}
-                            onChange={e => updatePart(part.key, 'unit_price', parseFloat(e.target.value) || 0)}
-                            className="w-full pl-5 pr-2 py-1.5 border border-gray-200 rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          />
-                        </div>
-                        <span className="text-xs font-semibold text-gray-600 w-16 text-right">${(part.quantity * part.unit_price).toFixed(2)}</span>
-                        <button onClick={() => removePart(part.key)} className="p-1 text-gray-400 hover:text-red-500 transition-colors">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                    <div className="flex justify-end pt-2 border-t border-gray-100">
-                      <p className="text-sm font-semibold text-gray-700">Parts Total: <span className="text-blue-700">${partsTotal.toFixed(2)}</span></p>
-                    </div>
-                  </div>
+                  <GroupedPartsEditor parts={parts} onUpdate={updatePart} onRemove={removePart} />
                 )}
 
                 {parts.length === 0 && !showCatalog && (

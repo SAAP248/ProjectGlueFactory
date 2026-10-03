@@ -21,9 +21,10 @@ interface Props {
     paymentMethod?: string | null;
   }) => Promise<void>;
   onSaveNotes: (jobId: string, wotId: string, notes: string) => Promise<void>;
+  techId: string | null;
 }
 
-export default function JobDetail({ job, onBack, onAction, onSaveNotes }: Props) {
+export default function JobDetail({ job, onBack, onAction, onSaveNotes, techId }: Props) {
   const [acting, setActing] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [techNotes, setTechNotes] = useState(job.technician_notes || '');
@@ -226,7 +227,7 @@ export default function JobDetail({ job, onBack, onAction, onSaveNotes }: Props)
           )}
 
           {/* Parts Used / Profitability */}
-          <PartsUsedPanel job={job} />
+          <PartsUsedPanel job={job} techId={techId} />
 
           {/* Completed Summary */}
           {isCompleted && (job.resolution_notes || job.customer_signature || job.payment_collected != null) && (

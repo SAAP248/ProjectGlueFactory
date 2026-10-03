@@ -5,6 +5,7 @@ import type { WorkOrder, WorkOrderLineItem, WorkOrderAttachment } from '../Custo
 import AssignmentsCard, { TechAssignment } from './AssignmentsCard';
 import WorkOrderAccountingTab from './WorkOrderAccountingTab';
 import WorkOrderSystemsTab from './WorkOrderSystemsTab';
+import WorkOrderPartsSummary from './WorkOrderPartsSummary';
 
 interface Props {
   workOrderId: string;
@@ -636,6 +637,7 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
                   <p className="text-sm text-amber-900 leading-relaxed">{wo.notes}</p>
                 </div>
               )}
+              <WorkOrderPartsSummary workOrderId={wo.id} />
               {!wo.reason_for_visit && !wo.scope_of_work && !wo.notes && (
                 <div className="text-center py-12 text-gray-400">
                   <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />

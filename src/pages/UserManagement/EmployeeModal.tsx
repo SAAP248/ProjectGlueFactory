@@ -3,6 +3,8 @@ import { X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useServiceRates, useBillingProducts } from './useEmployees';
 import type { Employee } from './types';
+import { fetchStockLocations, setHomeLocation } from '../../lib/truckStock';
+import type { StockLocationRecord } from '../../lib/truckStock';
 
 const ROLES = [
   { value: 'admin', label: 'Administrator' },
@@ -73,6 +75,17 @@ export default function EmployeeModal({ employee, canViewCompensation, onClose, 
     notes: '',
     color: '#2563eb',
   });
+
+  const [locations, setLocations] = useState<StockLocationRecord[]>([]);
+  const [homeLocation, setHomeLocationId] = useState('');
+  const initialHome = employee ? locations.find(l => l.assigned_employee_id === employee.id)?.id || '' : '';
+
+  useEffect(() => {
+    fetchStockLocations().then(({ data }) => {
+      setLocations(data);
+      if (employee) setHomeLocationId(data.find(l => l.assigned_employee_id === employee.id)?.id || '');
+    });
+  }, [employee]);
 
   useEffect(() => {
     if (employee) {
@@ -153,12 +166,19 @@ export default function EmployeeModal({ employee, canViewCompensation, onClose, 
       updated_at: new Date().toISOString(),
     };
 
+    let employeeId = employee?.id || null;
     if (isEdit) {
       const { error: err } = await supabase.from('employees').update(payload).eq('id', employee!.id);
       if (err) { setError(err.message); setSaving(false); return; }
     } else {
-      const { error: err } = await supabase.from('employees').insert(payload);
+      const { data: created, error: err } = await supabase.from('employees').insert(payload).select('id').maybeSingle();
       if (err) { setError(err.message); setSaving(false); return; }
+      employeeId = created?.id ?? null;
+    }
+
+    if (employeeId && homeLocation !== initialHome) {
+      const homeErr = await setHomeLocation(employeeId, homeLocation || null);
+      if (homeErr) { setError(homeErr); setSaving(false); return; }
     }
 
     setSaving(false);
@@ -199,6 +219,20 @@ export default function EmployeeModal({ employee, canViewCompensation, onClose, 
                 { value: 'inactive', label: 'Inactive' },
                 { value: 'terminated', label: 'Terminated' },
               ]} />
+              <div>
+                <SelectField
+                  label="Home Truck / Warehouse"
+                  value={homeLocation}
+                  onChange={setHomeLocationId}
+                  allowEmpty
+                  emptyLabel="No truck set"
+                  options={locations.filter(l => l.is_active).map(l => {
+                    const other = l.assigned_employee_id && l.assigned_employee_id !== employee?.id;
+                    return { value: l.id, label: `${l.name}${l.warehouse_type === 'truck' ? ' (Truck)' : ' (Warehouse)'}${other ? ' - reassign' : ''}` };
+                  })}
+                />
+                <p className="mt-1 text-[11px] text-gray-500">Parts they use on jobs come out of this stock.</p>
+              </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">Color</label>
                 <div className="flex gap-1.5 flex-wrap">

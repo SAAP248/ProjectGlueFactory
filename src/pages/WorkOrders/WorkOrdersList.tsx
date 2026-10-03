@@ -518,7 +518,7 @@ export default function WorkOrdersList({ onViewDetail, initialFilter }: Props) {
                 <tbody className="divide-y divide-gray-100">
                   {filtered.map(wo => {
                     const leadTech = getLeadTech(wo);
-                    const techCount = (wo.work_order_technicians || []).length;
+                    const techCount = new Set((wo.work_order_technicians || []).map((t: any) => t.employee_id)).size;
                     const isGoBack = wo.is_go_back || wo.status === 'go_back';
                     const isTroubleCustomer = (wo.companies as any)?.is_trouble_customer;
                     const SourceIcon = wo.source ? SOURCE_ICONS[wo.source] : null;

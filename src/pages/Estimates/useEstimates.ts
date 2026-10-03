@@ -32,6 +32,8 @@ export interface EstimateRecord {
   cover_title: string | null;
   cover_image_url: string | null;
   scope_of_work: string | null;
+  accepted_via_work_order_id: string | null;
+  accepted_wo?: { wo_number: string | null } | null;
   created_at: string;
   updated_at: string;
   companies?: { name: string } | null;
@@ -152,7 +154,7 @@ export async function fetchEstimateDetail(id: string): Promise<{ data: EstimateD
   const [estRes, itemsRes, invRes] = await Promise.all([
     supabase
       .from('estimates')
-      .select('*, companies(name), sites(name, address, city, state, zip)')
+      .select('*, companies(name), sites(name, address, city, state, zip), accepted_wo:work_orders!estimates_accepted_via_work_order_id_fkey(wo_number)')
       .eq('id', id)
       .maybeSingle(),
     supabase.from('estimate_line_items').select('*').eq('estimate_id', id).order('sort_order', { ascending: true, nullsFirst: false }).order('created_at'),

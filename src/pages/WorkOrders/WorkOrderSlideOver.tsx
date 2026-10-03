@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { X, Wrench, MapPin, Clock, User, Building2, Star, Phone, FileText, AlertCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import TechLifecycleActions, { type LifecycleTech } from './TechLifecycleActions';
+import WorkOrderPartsSummary from './WorkOrderPartsSummary';
 
 interface Props {
   workOrderId: string;
@@ -98,7 +99,9 @@ export default function WorkOrderSlideOver({ workOrderId, onClose }: Props) {
   useEffect(() => { load(); }, [load]);
 
   const techs = wo?.work_order_technicians ?? [];
+  const multiDay = new Set(techs.map(t => t.scheduled_date).filter(Boolean)).size > 1;
   const sortedTechs = [...techs].sort((a, b) => {
+    if (multiDay && a.scheduled_date !== b.scheduled_date) return (a.scheduled_date || '').localeCompare(b.scheduled_date || '');
     if (a.is_lead !== b.is_lead) return a.is_lead ? -1 : 1;
     return (a.scheduled_start_time || '').localeCompare(b.scheduled_start_time || '');
   });
@@ -246,6 +249,11 @@ export default function WorkOrderSlideOver({ workOrderId, onClose }: Props) {
                               </div>
                               <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
                                 {t.employees?.role && <span className="capitalize">{t.employees.role}</span>}
+                                {multiDay && t.scheduled_date && (
+                                  <span className="font-medium text-gray-700">
+                                    {new Date(t.scheduled_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                  </span>
+                                )}
                                 {t.scheduled_start_time && (
                                   <span>
                                     {formatTime12(t.scheduled_start_time)}
@@ -280,6 +288,8 @@ export default function WorkOrderSlideOver({ workOrderId, onClose }: Props) {
                   </div>
                 )}
               </div>
+
+              <WorkOrderPartsSummary workOrderId={wo.id} />
 
               {wo.technician_notes && (
                 <div className="bg-white rounded-xl border border-gray-100 p-4">

@@ -13,6 +13,7 @@ import CustomerLinkCard from './CustomerLinkCard';
 import CustomerConversation from './CustomerConversation';
 import SendToCustomerModal from './SendToCustomerModal';
 import { printEstimate } from './printEstimate';
+import LinkedWorkOrdersCard from '../WorkOrders/LinkedWorkOrdersCard';
 
 interface Props {
   estimateId: string | null;
@@ -302,6 +303,11 @@ export default function EstimatePanel({
                       <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                       <div className="text-sm">
                         <p className="font-medium text-emerald-900">Accepted on {formatDate(est.accepted_at)}</p>
+                        {est.accepted_via_work_order_id && (
+                          <p className="text-emerald-800 mt-1">
+                            Accepted when work order {est.accepted_wo?.wo_number || ''} was created
+                          </p>
+                        )}
                         {est.customer_name_signed && (
                           <p className="text-emerald-800 mt-1">
                             Signed by {est.customer_name_signed}{est.customer_email_signed ? ` (${est.customer_email_signed})` : ''}
@@ -317,6 +323,8 @@ export default function EstimatePanel({
                   ) : null}
                 </section>
               )}
+
+              <LinkedWorkOrdersCard source={{ type: 'estimate', id: est.id }} onChanged={() => { load(); onChanged(); }} />
 
               <section>
                 <h3 className="text-sm font-semibold text-gray-900 mb-3">Line Items</h3>

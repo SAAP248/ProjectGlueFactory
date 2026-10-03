@@ -27,6 +27,7 @@ import {
 } from './useInvoices';
 import type { InvoiceLineItem } from './useInvoices';
 import InvoiceActions from './InvoiceActions';
+import LinkedWorkOrdersCard from '../WorkOrders/LinkedWorkOrdersCard';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -495,6 +496,8 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
           onBack();
         }}
       />
+
+      <LinkedWorkOrdersCard source={{ type: 'invoice', id: invoice.id }} onChanged={refetch} />
 
       {/* --- Info Cards Row --- */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

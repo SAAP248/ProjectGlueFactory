@@ -200,6 +200,7 @@ export default function TechnicianPortal() {
         onBack={() => setSelectedJob(null)}
         onAction={handleAction}
         onSaveNotes={handleSaveNotes}
+        techId={selectedTechId || null}
       />
     );
   }
