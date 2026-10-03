@@ -253,6 +253,8 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
     setTimeout(() => setToast(null), 3000);
   }
 
+  const [sendOpen, setSendOpen] = useState(false);
+
   if (!deal) return null;
 
   const days = getDaysInStage(deal.stage_entered_at);
@@ -283,8 +285,6 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
     setTaskTitle('');
     setTaskDue('');
   };
-
-  const [sendOpen, setSendOpen] = useState(false);
 
   const openSend = () => {
     if (!estimateId) {
