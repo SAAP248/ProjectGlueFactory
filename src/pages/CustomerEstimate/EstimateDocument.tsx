@@ -87,7 +87,34 @@ export default function EstimateDocument({ data }: { data: CustomerEstimateData 
           </div>
         )} */}
 
-        <div className="rounded-xl border border-slate-200 overflow-hidden">
+        <div className="sm:hidden rounded-xl border border-slate-200 overflow-hidden divide-y divide-slate-100">
+          {groups.map((g) => (
+            <div key={g.id} className="divide-y divide-slate-100">
+              {g.name && (
+                <div className="flex items-center justify-between gap-3 bg-slate-50 px-4 py-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">{g.name}</span>
+                  <span className="text-xs font-semibold text-slate-600 tabular-nums">
+                    {formatMoney(g.items.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0))}
+                  </span>
+                </div>
+              )}
+              {g.items.map((li) => (
+                <div key={li.id} className="px-4 py-3">
+                  <p className="text-sm font-medium text-slate-900 break-words">{li.description || 'Item'}</p>
+                  <div className="mt-1 flex items-end justify-between gap-3">
+                    <span className="text-xs text-slate-500 tabular-nums">{Number(li.quantity)} × {formatMoney(li.unit_price)}</span>
+                    <span className="text-sm font-semibold text-slate-900 tabular-nums">{formatMoney(Number(li.quantity) * Number(li.unit_price))}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+          {data.line_items.length === 0 && (
+            <p className="px-4 py-10 text-center text-sm text-slate-500">No items have been added yet.</p>
+          )}
+        </div>
+
+        <div className="hidden sm:block rounded-xl border border-slate-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
