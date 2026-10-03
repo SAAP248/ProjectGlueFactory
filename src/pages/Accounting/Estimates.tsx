@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, FileText, Search, Clock, CheckCircle2, DollarSign, AlertCircle, Loader2 } from 'lucide-react';
+import { Plus, FileText, Search, Clock, CheckCircle2, DollarSign, AlertCircle, Loader2, Eye, MessageSquare, BookOpen, PenLine } from 'lucide-react';
 import { useEstimateList, ESTIMATE_STATUSES, estimateStatusStyles, formatMoney, formatDate } from '../Estimates/useEstimates';
 import EstimatePanel from '../Estimates/EstimatePanel';
 
@@ -8,7 +8,7 @@ interface Props {
 }
 
 export default function Estimates({ onOpenInvoice }: Props) {
-  const { estimates, convertedIds, loading, error, refetch } = useEstimateList();
+  const { estimates, convertedIds, unreadCounts, loading, error, refetch } = useEstimateList();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -128,8 +128,15 @@ export default function Estimates({ onOpenInvoice }: Props) {
                   <tr key={e.id} onClick={() => setSelectedId(e.id)} className="hover:bg-blue-50/40 cursor-pointer transition-colors group">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <FileText className="h-5 w-5 text-gray-400 group-hover:text-blue-500 transition-colors" />
+                        {e.view_mode === 'proposal'
+                          ? <BookOpen className="h-5 w-5 text-gray-400 group-hover:text-blue-500 transition-colors" aria-label="Proposal" />
+                          : <FileText className="h-5 w-5 text-gray-400 group-hover:text-blue-500 transition-colors" aria-label="Estimate" />}
                         <span className="font-mono text-sm font-semibold text-gray-900">{e.estimate_number}</span>
+                        {unreadCounts[e.id] > 0 && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-semibold rounded-full bg-blue-600 text-white" title={`${unreadCounts[e.id]} unread customer message(s)`}>
+                            <MessageSquare className="w-3 h-3" /> {unreadCounts[e.id]}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -148,6 +155,13 @@ export default function Estimates({ onOpenInvoice }: Props) {
                           <span className="px-2 py-1 text-xs font-medium rounded-full bg-teal-100 text-teal-800">Invoiced</span>
                         )}
                       </div>
+                      {e.accepted_at && e.customer_name_signed ? (
+                        <p className="mt-1 flex items-center gap-1 text-xs text-emerald-700"><PenLine className="w-3 h-3" /> Signed by {e.customer_name_signed} &middot; {formatDate(e.accepted_at)}</p>
+                      ) : e.declined_at && e.status === 'declined' ? (
+                        <p className="mt-1 text-xs text-gray-500">Declined {formatDate(e.declined_at)}</p>
+                      ) : e.viewed_at ? (
+                        <p className="mt-1 flex items-center gap-1 text-xs text-gray-500"><Eye className="w-3 h-3" /> Viewed {formatDate(e.viewed_at)}</p>
+                      ) : null}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <span className="text-sm font-medium text-blue-600 group-hover:text-blue-700">View</span>

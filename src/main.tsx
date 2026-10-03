@@ -2,12 +2,21 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RoleProvider } from './contexts/RoleContext';
 import App from './App.tsx';
-import PublicProposal from './pages/PublicProposal/index';
+import CustomerEstimatePage from './pages/CustomerEstimate/index';
 import PublicPayment from './pages/PublicPayment/index';
 import './index.css';
 
-function getPublicRoute(): { type: 'proposal' | 'pay'; token: string } | null {
+type PublicRoute =
+  | { type: 'estimate'; token: string; page?: string; preview: boolean }
+  | { type: 'proposal'; token: string }
+  | { type: 'pay'; token: string };
+
+function getPublicRoute(): PublicRoute | null {
   const hash = window.location.hash;
+  const estimateMatch = hash.match(/^#\/estimate\/([A-Za-z0-9]+)(?:\/([a-z]+))?(\?.*)?$/);
+  if (estimateMatch) {
+    return { type: 'estimate', token: estimateMatch[1], page: estimateMatch[2], preview: /[?&]preview=1/.test(estimateMatch[3] || '') };
+  }
   const proposalMatch = hash.match(/^#\/proposal\/(.+)$/);
   if (proposalMatch) return { type: 'proposal', token: proposalMatch[1] };
   const payMatch = hash.match(/^#\/pay\/(.+)$/);
@@ -19,8 +28,10 @@ const publicRoute = getPublicRoute();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {publicRoute?.type === 'proposal' ? (
-      <PublicProposal token={publicRoute.token} />
+    {publicRoute?.type === 'estimate' ? (
+      <CustomerEstimatePage token={publicRoute.token} initialPage={publicRoute.page} preview={publicRoute.preview} />
+    ) : publicRoute?.type === 'proposal' ? (
+      <CustomerEstimatePage dealToken={publicRoute.token} preview={false} />
     ) : publicRoute?.type === 'pay' ? (
       <PublicPayment token={publicRoute.token} />
     ) : (

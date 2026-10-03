@@ -9,6 +9,8 @@ import {
 } from './useEstimates';
 import type { EstimateDetailData } from './useEstimates';
 import EstimateForm from './EstimateForm';
+import CustomerLinkCard from './CustomerLinkCard';
+import CustomerConversation from './CustomerConversation';
 import { printEstimate } from './printEstimate';
 
 interface Props {
@@ -268,6 +270,8 @@ export default function EstimatePanel({
                 {detail.deal && <InfoCard icon={Briefcase} label="Linked Deal" value={detail.deal.title || 'Untitled deal'} />}
               </section>
 
+              <CustomerLinkCard estimate={est} onSaved={() => { load(); onChanged(); }} />
+
               {(est.accepted_at || est.declined_at) && (
                 <section className={`rounded-xl border p-4 ${est.declined_at && est.status === 'declined' ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'}`}>
                   {est.status === 'declined' && est.declined_at ? (
@@ -288,6 +292,11 @@ export default function EstimatePanel({
                             Signed by {est.customer_name_signed}{est.customer_email_signed ? ` (${est.customer_email_signed})` : ''}
                           </p>
                         )}
+                        {est.signature_type === 'drawn' && est.signature_data?.startsWith('data:image/png') ? (
+                          <img src={est.signature_data} alt="Customer signature" className="mt-3 h-16 max-w-[240px] object-contain bg-white rounded-lg border border-emerald-200 px-3" />
+                        ) : est.signature_type === 'typed' && est.customer_name_signed ? (
+                          <p className="mt-3 inline-block bg-white rounded-lg border border-emerald-200 px-4 py-1 text-2xl text-gray-900" style={{ fontFamily: "'Dancing Script', cursive" }}>{est.customer_name_signed}</p>
+                        ) : null}
                       </div>
                     </div>
                   ) : null}
@@ -337,6 +346,8 @@ export default function EstimatePanel({
                   {est.terms && <TextBlock label="Terms" text={est.terms} />}
                 </section>
               )}
+
+              <CustomerConversation estimateId={est.id} onRead={onChanged} />
             </div>
           ) : null}
         </div>

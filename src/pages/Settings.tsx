@@ -3,10 +3,11 @@ import {
   Settings as SettingsIcon, User, Bell, Shield as ShieldIcon, Database,
   ShieldAlert, Flame, ShieldCheck, KeyRound, Network, Tv2, DoorOpen,
   Plus, Trash2, GripVertical, CheckCircle2, RotateCcw, Map, Eye, EyeOff,
-  ExternalLink, Check, Loader2
+  ExternalLink, Check, Loader2, BookOpen
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAppSetting, saveAppSetting } from '../lib/useAppSettings';
+import ProposalDefaultsPanel from './Estimates/ProposalDefaultsPanel';
 
 interface SystemType {
   id: string;
@@ -47,7 +48,7 @@ const iconComponentMap: Record<string, React.ElementType> = {
 };
 
 export default function Settings() {
-  const [activeSection, setActiveSection] = useState<'system-types' | 'go-back-reasons' | 'integrations'>('integrations');
+  const [activeSection, setActiveSection] = useState<'system-types' | 'go-back-reasons' | 'integrations' | 'proposal-defaults'>('integrations');
 
   const [systemTypes, setSystemTypes] = useState<SystemType[]>([]);
   const [loadingTypes, setLoadingTypes] = useState(true);
@@ -159,7 +160,7 @@ export default function Settings() {
         <p className="text-gray-600 mt-1">Configure your system preferences and integrations</p>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           onClick={() => setActiveSection('integrations')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -193,9 +194,21 @@ export default function Settings() {
           <RotateCcw className="h-4 w-4" />
           Go-Back Reasons
         </button>
+        <button
+          onClick={() => setActiveSection('proposal-defaults')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeSection === 'proposal-defaults'
+              ? 'bg-sky-700 text-white'
+              : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          <BookOpen className="h-4 w-4" />
+          Proposal Defaults
+        </button>
       </div>
 
       {activeSection === 'integrations' && <IntegrationsPanel />}
+      {activeSection === 'proposal-defaults' && <ProposalDefaultsPanel />}
 
       {activeSection === 'system-types' && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">

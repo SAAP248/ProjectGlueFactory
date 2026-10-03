@@ -21,6 +21,15 @@ export interface EstimateRecord {
   declined_reason: string | null;
   customer_name_signed: string | null;
   customer_email_signed: string | null;
+  public_token: string;
+  view_mode: 'estimate' | 'proposal';
+  viewed_at: string | null;
+  last_viewed_at: string | null;
+  signature_type: 'typed' | 'drawn' | null;
+  signature_data: string | null;
+  cover_title: string | null;
+  cover_image_url: string | null;
+  scope_of_work: string | null;
   created_at: string;
   updated_at: string;
   companies?: { name: string } | null;
@@ -94,6 +103,7 @@ function generateEstimateNumber(): string {
 export function useEstimateList(companyId?: string) {
   const [estimates, setEstimates] = useState<EstimateRecord[]>([]);
   const [convertedIds, setConvertedIds] = useState<Set<string>>(new Set());
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,9 +116,10 @@ export function useEstimateList(companyId?: string) {
       .order('created_at', { ascending: false });
     if (companyId) query = query.eq('company_id', companyId);
 
-    const [{ data, error: fetchError }, { data: invData }] = await Promise.all([
+    const [{ data, error: fetchError }, { data: invData }, { data: unreadData }] = await Promise.all([
       query,
       supabase.from('invoices').select('estimate_id').not('estimate_id', 'is', null),
+      supabase.from('proposal_messages').select('estimate_id').eq('sender_type', 'customer').is('read_at', null),
     ]);
 
     if (fetchError) {
@@ -118,6 +129,9 @@ export function useEstimateList(companyId?: string) {
       setEstimates((data || []) as EstimateRecord[]);
     }
     setConvertedIds(new Set((invData || []).map((r: { estimate_id: string }) => r.estimate_id)));
+    const counts: Record<string, number> = {};
+    (unreadData || []).forEach((r: { estimate_id: string }) => { counts[r.estimate_id] = (counts[r.estimate_id] || 0) + 1; });
+    setUnreadCounts(counts);
     setLoading(false);
   }, [companyId]);
 
@@ -125,7 +139,7 @@ export function useEstimateList(companyId?: string) {
     fetchEstimates();
   }, [fetchEstimates]);
 
-  return { estimates, convertedIds, loading, error, refetch: fetchEstimates };
+  return { estimates, convertedIds, unreadCounts, loading, error, refetch: fetchEstimates };
 }
 
 export async function fetchEstimateDetail(id: string): Promise<{ data: EstimateDetailData | null; error: string | null }> {
