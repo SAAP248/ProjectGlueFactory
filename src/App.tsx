@@ -46,6 +46,7 @@ function App() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [pageFilter, setPageFilter] = useState<string | undefined>(undefined);
   const [pendingInspectionId, setPendingInspectionId] = useState<string | null>(null);
+  const [pendingInvoiceId, setPendingInvoiceId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!canAccessPage(role, currentPage)) {
@@ -59,12 +60,18 @@ function App() {
 
   const navigateTo = useCallback((page: string, filter?: string) => {
     setPageFilter(filter);
+    setPendingInvoiceId(null);
     setCurrentPage(page);
   }, []);
 
   const navigateToCustomer = (customerId: string) => {
     setSelectedCustomerId(customerId);
     setCurrentPage('customer-profile');
+  };
+
+  const openInvoice = (invoiceId: string) => {
+    setPendingInvoiceId(invoiceId);
+    setCurrentPage('invoices');
   };
 
   const renderPage = () => {
@@ -85,6 +92,7 @@ function App() {
             customerId={selectedCustomerId}
             onBack={() => setCurrentPage('customers')}
             onViewCustomer={navigateToCustomer}
+            onOpenInvoice={openInvoice}
           />
         );
       case 'chat':
@@ -121,9 +129,9 @@ function App() {
       case 'site-inventory':
         return <SiteInventory />;
       case 'estimates':
-        return <Estimates />;
+        return <Estimates onOpenInvoice={openInvoice} />;
       case 'invoices':
-        return <Invoices />;
+        return <Invoices key={pendingInvoiceId ?? 'list'} initialInvoiceId={pendingInvoiceId} />;
       case 'statements':
         return <Statements />;
       case 'transactions':
@@ -155,7 +163,7 @@ function App() {
     <div className="flex h-screen bg-gray-50">
       <Sidebar
         currentPage={currentPage}
-        setCurrentPage={(page: string) => { setPageFilter(undefined); setCurrentPage(page); }}
+        setCurrentPage={(page: string) => { setPageFilter(undefined); setPendingInvoiceId(null); setCurrentPage(page); }}
         collapsed={sidebarCollapsed}
         setCollapsed={setSidebarCollapsed}
       />

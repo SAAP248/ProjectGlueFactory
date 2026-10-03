@@ -1,12 +1,17 @@
 import { useState } from 'react';
 import { Plus, FileText, Receipt, CreditCard, Gift } from 'lucide-react';
 import type { Estimate, Invoice, Transaction, Credit } from './types';
+import EstimatePanel from '../Estimates/EstimatePanel';
 
 interface Props {
+  companyId: string;
+  companyName: string;
   estimates: Estimate[];
   invoices: Invoice[];
   transactions: Transaction[];
   credits: Credit[];
+  onChanged: () => void;
+  onOpenInvoice?: (invoiceId: string) => void;
 }
 
 const estimateStatusStyles: Record<string, string> = {
@@ -47,8 +52,12 @@ const SUB_TABS = [
   { id: 'credits', label: 'Credits', icon: Gift },
 ];
 
-export default function AccountingTab({ estimates, invoices, transactions, credits }: Props) {
+export default function AccountingTab({
+  companyId, companyName, estimates, invoices, transactions, credits, onChanged, onOpenInvoice,
+}: Props) {
   const [sub, setSub] = useState('estimates');
+  const [selectedEstimateId, setSelectedEstimateId] = useState<string | null>(null);
+  const [creatingEstimate, setCreatingEstimate] = useState(false);
 
   const totalPaid = transactions.reduce((sum, t) => sum + Number(t.amount), 0);
   const availableCredits = credits.filter(c => c.status === 'unapplied').reduce((sum, c) => sum + Number(c.amount), 0);
@@ -107,7 +116,7 @@ export default function AccountingTab({ estimates, invoices, transactions, credi
           </div>
           <div className="pr-4">
             {sub === 'estimates' && (
-              <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+              <button onClick={() => setCreatingEstimate(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
                 <Plus className="h-4 w-4" />
                 New Estimate
               </button>
@@ -154,7 +163,7 @@ export default function AccountingTab({ estimates, invoices, transactions, credi
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {estimates.map(est => (
-                    <tr key={est.id} className="hover:bg-gray-50 cursor-pointer transition-colors">
+                    <tr key={est.id} onClick={() => setSelectedEstimateId(est.id)} className="hover:bg-blue-50/40 cursor-pointer transition-colors">
                       <td className="px-6 py-4 font-mono text-sm font-medium text-blue-700">{est.estimate_number}</td>
                       <td className="px-6 py-4 text-sm text-gray-700">
                         {new Date(est.estimate_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -323,6 +332,17 @@ export default function AccountingTab({ estimates, invoices, transactions, credi
           </>
         )}
       </div>
+
+      <EstimatePanel
+        estimateId={selectedEstimateId}
+        creating={creatingEstimate}
+        createFor={{ id: companyId, name: companyName }}
+        onClose={() => setSelectedEstimateId(null)}
+        onCreateDone={() => setCreatingEstimate(false)}
+        onOpenEstimate={setSelectedEstimateId}
+        onChanged={onChanged}
+        onOpenInvoice={onOpenInvoice}
+      />
     </div>
   );
 }

@@ -45,10 +45,10 @@ function formatDate(d: string | null) {
   });
 }
 
-export default function Invoices() {
+export default function Invoices({ initialInvoiceId = null }: { initialInvoiceId?: string | null }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(initialInvoiceId);
   const [showNewInvoice, setShowNewInvoice] = useState(false);
 
   const { invoices, loading, stats, refetch } = useInvoiceList(searchTerm, statusFilter);

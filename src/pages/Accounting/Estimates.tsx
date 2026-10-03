@@ -1,98 +1,174 @@
-import { Plus, FileText } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Plus, FileText, Search, Clock, CheckCircle2, DollarSign, AlertCircle, Loader2 } from 'lucide-react';
+import { useEstimateList, ESTIMATE_STATUSES, estimateStatusStyles, formatMoney, formatDate } from '../Estimates/useEstimates';
+import EstimatePanel from '../Estimates/EstimatePanel';
 
-export default function Estimates() {
-  const stats = [
-    { label: 'Total Estimates', value: '156', color: 'bg-blue-500' },
-    { label: 'Pending', value: '42', color: 'bg-yellow-500' },
-    { label: 'Accepted', value: '89', color: 'bg-green-500' },
-    { label: 'Total Value', value: '$428K', color: 'bg-purple-500' },
-  ];
+interface Props {
+  onOpenInvoice?: (invoiceId: string) => void;
+}
 
-  const estimates = [
-    { id: 1, number: 'EST-1045', customer: 'Acme Corporation', date: '2024-03-15', expirationDate: '2024-04-15', amount: 75000, status: 'Pending' },
-    { id: 2, number: 'EST-1044', customer: 'Downtown Mall', date: '2024-03-12', expirationDate: '2024-04-12', amount: 125000, status: 'Accepted' },
-    { id: 3, number: 'EST-1043', customer: 'Tech Solutions Inc', date: '2024-03-10', expirationDate: '2024-04-10', amount: 42000, status: 'Pending' },
-  ];
+export default function Estimates({ onOpenInvoice }: Props) {
+  const { estimates, convertedIds, loading, error, refetch } = useEstimateList();
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Pending': return 'bg-yellow-100 text-yellow-800';
-      case 'Accepted': return 'bg-green-100 text-green-800';
-      case 'Declined': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return estimates.filter((e) => {
+      if (status && e.status !== status) return false;
+      if (!term) return true;
+      return (
+        e.estimate_number.toLowerCase().includes(term) ||
+        (e.companies?.name || '').toLowerCase().includes(term)
+      );
+    });
+  }, [estimates, search, status]);
+
+  const stats = useMemo(() => {
+    const pending = estimates.filter((e) => e.status === 'draft' || e.status === 'sent');
+    const approved = estimates.filter((e) => e.status === 'approved');
+    return [
+      { label: 'Total Estimates', value: String(estimates.length), icon: FileText, tone: 'bg-blue-50 text-blue-600' },
+      { label: 'Pending', value: String(pending.length), sub: formatMoney(pending.reduce((s, e) => s + Number(e.total), 0)), icon: Clock, tone: 'bg-amber-50 text-amber-600' },
+      { label: 'Approved', value: String(approved.length), sub: formatMoney(approved.reduce((s, e) => s + Number(e.total), 0)), icon: CheckCircle2, tone: 'bg-emerald-50 text-emerald-600' },
+      { label: 'Total Value', value: formatMoney(estimates.reduce((s, e) => s + Number(e.total), 0)), icon: DollarSign, tone: 'bg-teal-50 text-teal-600' },
+    ];
+  }, [estimates]);
 
   return (
     <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Estimates</h1>
-          <p className="text-gray-600 mt-1">Create and manage customer estimates</p>
+          <p className="text-gray-600 mt-1">Create, send, and track customer estimates</p>
         </div>
-        <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
-          <Plus className="h-5 w-5 mr-2" />
-          New Estimate
+        <button
+          onClick={() => setCreating(true)}
+          className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors shadow-sm"
+        >
+          <Plus className="h-5 w-5 mr-2" /> New Estimate
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        {stats.map((stat, index) => (
-          <div key={index} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {stats.map((s) => (
+          <div key={s.label} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+            <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">{stat.label}</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">{stat.value}</p>
+                <p className="text-sm font-medium text-gray-600">{s.label}</p>
+                <p className="text-2xl font-bold text-gray-900 mt-2">{loading ? '—' : s.value}</p>
+                {s.sub && !loading && <p className="text-xs text-gray-500 mt-1">{s.sub}</p>}
               </div>
-              <div className={`${stat.color} w-12 h-12 rounded-xl`} />
+              <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${s.tone}`}>
+                <s.icon className="h-5 w-5" />
+              </div>
             </div>
           </div>
         ))}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Estimate #</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Customer</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Expiration</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Amount</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {estimates.map((estimate) => (
-                <tr key={estimate.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center">
-                      <FileText className="h-5 w-5 text-gray-400 mr-3" />
-                      <span className="font-semibold text-gray-900">{estimate.number}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{estimate.customer}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{estimate.date}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{estimate.expirationDate}</td>
-                  <td className="px-6 py-4 text-sm font-semibold text-gray-900">${estimate.amount.toLocaleString()}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusColor(estimate.status)}`}>
-                      {estimate.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
-                      View
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="p-4 border-b border-gray-100 flex flex-col lg:flex-row gap-3 lg:items-center justify-between">
+          <div className="relative w-full lg:w-80">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by estimate # or customer"
+              className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            />
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {['', ...ESTIMATE_STATUSES].map((s) => (
+              <button
+                key={s || 'all'}
+                onClick={() => setStatus(s)}
+                className={`px-3 py-1.5 text-sm font-medium rounded-lg capitalize transition-colors ${
+                  status === s ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                {s || 'All'}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {loading ? (
+          <div className="py-20 flex items-center justify-center text-gray-500">
+            <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading estimates...
+          </div>
+        ) : error ? (
+          <div className="py-16 text-center">
+            <AlertCircle className="h-10 w-10 text-red-400 mx-auto mb-3" />
+            <p className="text-gray-700">{error}</p>
+            <button onClick={refetch} className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-700">Try again</button>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-16 text-center">
+            <FileText className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-700 font-medium">{estimates.length ? 'No estimates match your filters' : 'No estimates yet'}</p>
+            <p className="text-sm text-gray-500 mt-1">
+              {estimates.length ? 'Try a different search or status.' : 'Create your first estimate to get started.'}
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  {['Estimate #', 'Customer', 'Date', 'Expires', 'Amount', 'Status', ''].map((h) => (
+                    <th key={h} className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered.map((e) => (
+                  <tr key={e.id} onClick={() => setSelectedId(e.id)} className="hover:bg-blue-50/40 cursor-pointer transition-colors group">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-5 w-5 text-gray-400 group-hover:text-blue-500 transition-colors" />
+                        <span className="font-mono text-sm font-semibold text-gray-900">{e.estimate_number}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="text-sm font-medium text-gray-900">{e.companies?.name || '—'}</p>
+                      {e.sites?.name && <p className="text-xs text-gray-500">{e.sites.name}</p>}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-700 whitespace-nowrap">{formatDate(e.estimate_date)}</td>
+                    <td className="px-6 py-4 text-sm text-gray-700 whitespace-nowrap">{formatDate(e.expiration_date)}</td>
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-900 whitespace-nowrap">{formatMoney(e.total)}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`px-2.5 py-1 text-xs font-medium rounded-full capitalize ${estimateStatusStyles[e.status] || 'bg-gray-100 text-gray-700'}`}>
+                          {e.status}
+                        </span>
+                        {convertedIds.has(e.id) && (
+                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-teal-100 text-teal-800">Invoiced</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <span className="text-sm font-medium text-blue-600 group-hover:text-blue-700">View</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
+
+      <EstimatePanel
+        estimateId={selectedId}
+        creating={creating}
+        onClose={() => setSelectedId(null)}
+        onCreateDone={() => setCreating(false)}
+        onOpenEstimate={setSelectedId}
+        onChanged={refetch}
+        onOpenInvoice={onOpenInvoice}
+      />
     </div>
   );
 }

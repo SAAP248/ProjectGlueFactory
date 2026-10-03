@@ -21,6 +21,7 @@ interface Props {
   customerId: string | null;
   onBack: () => void;
   onViewCustomer: (id: string) => void;
+  onOpenInvoice?: (invoiceId: string) => void;
 }
 
 interface ParentSummary {
@@ -45,7 +46,7 @@ const tagColor = (tag: string) => {
   return 'bg-gray-100 text-gray-600';
 };
 
-export default function CustomerProfile({ customerId, onBack, onViewCustomer }: Props) {
+export default function CustomerProfile({ customerId, onBack, onViewCustomer, onOpenInvoice }: Props) {
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
 
@@ -158,6 +159,15 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer }: 
     if (smsRes.data) setSmsMessages(smsRes.data);
 
     setLoading(false);
+  }
+
+  async function refreshAccounting(id: string) {
+    const [invoicesRes, estimatesRes] = await Promise.all([
+      supabase.from('invoices').select('*').eq('company_id', id).order('invoice_date', { ascending: false }),
+      supabase.from('estimates').select('*').eq('company_id', id).order('estimate_date', { ascending: false }),
+    ]);
+    if (invoicesRes.data) setInvoices(invoicesRes.data);
+    if (estimatesRes.data) setEstimates(estimatesRes.data);
   }
 
   if (loading) {
@@ -577,6 +587,10 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer }: 
         )}
         {activeTab === 'accounting' && (
           <AccountingTab
+            companyId={company.id}
+            companyName={company.name}
+            onChanged={() => refreshAccounting(company.id)}
+            onOpenInvoice={onOpenInvoice}
             estimates={estimates}
             invoices={invoices}
             transactions={transactions}

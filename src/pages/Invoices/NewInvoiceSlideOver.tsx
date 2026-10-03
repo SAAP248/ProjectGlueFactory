@@ -38,7 +38,7 @@ interface SiteOption {
   zip: string | null;
 }
 
-interface ProductOption {
+export interface ProductOption {
   id: string;
   name: string;
   price: number | null;
@@ -86,7 +86,7 @@ function nextKey(): string {
 // Self-contained product search per line item
 // ---------------------------------------------------------------------------
 
-function LineItemProductSearch({
+export function LineItemProductSearch({
   description,
   onDescriptionChange,
   onProductSelect,
