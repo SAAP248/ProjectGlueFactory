@@ -33,6 +33,7 @@ import {
   Hash,
   UserCog,
   ShoppingBag,
+  ShieldCheck,
 } from 'lucide-react';
 import { useRole } from '../contexts/RoleContext';
 import { canAccessPage } from '../config/roleAccess';
@@ -57,6 +58,7 @@ const topNavItems = [
   { id: 'deals', label: 'Deals', icon: TrendingUp },
   { id: 'projects', label: 'Projects', icon: Briefcase },
   { id: 'work-orders', label: 'Work Orders', icon: ClipboardList },
+  { id: 'service-plans', label: 'Service Plans', icon: ShieldCheck },
   { id: 'tickets', label: 'Tickets', icon: LifeBuoy },
   { id: 'inspections', label: 'Inspections', icon: ClipboardCheck },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare },

@@ -9,6 +9,7 @@ import PhotoGallery from '../Photos/PhotoGallery';
 import DocumentGallery from '../Documents/DocumentGallery';
 import SiteOverview from './SiteOverview';
 import { supabase } from '../../lib/supabase';
+import { fetchCoveredSiteIds } from '../ServicePlans/lib/queries';
 
 interface SitePhotoPreview {
   id: string;
@@ -44,6 +45,11 @@ export default function SitesSystemsTab({ companyName, accountNumber, companySta
   const [photoBySite, setPhotoBySite] = useState<Record<string, SitePhotoPreview[]>>({});
   const [docCountBySite, setDocCountBySite] = useState<Record<string, number>>({});
   const [siteView, setSiteView] = useState<SiteView | null>(null);
+  const [coveredSites, setCoveredSites] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    fetchCoveredSiteIds(companyId).then(setCoveredSites).catch(() => setCoveredSites(new Map()));
+  }, [companyId]);
 
   useEffect(() => {
     if (sites.length === 0) return;
@@ -204,6 +210,11 @@ export default function SitesSystemsTab({ companyName, accountNumber, companySta
                     }`}>
                       {site.site_type}
                     </span>
+                    {coveredSites.has(site.id) && (
+                      <span className="px-2 py-0.5 text-xs rounded-full font-medium bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200">
+                        {coveredSites.get(site.id)}
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm text-gray-500 mt-0.5">
                     {site.address}, {site.city}, {site.state} {site.zip}

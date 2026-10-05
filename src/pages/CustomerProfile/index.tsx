@@ -14,6 +14,7 @@ import WorkOrdersTab from './WorkOrdersTab';
 import ContactsTab from './ContactsTab';
 import CommunicationsTab from './CommunicationsTab';
 import DealsTab from './DealsTab';
+import CustomerPlansTab from '../ServicePlans/CustomerPlansTab';
 import PhotoGallery from '../Photos/PhotoGallery';
 import DocumentGallery from '../Documents/DocumentGallery';
 
@@ -80,6 +81,7 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
     { id: 'sites-systems', label: 'Sites & Systems' },
     { id: 'accounting', label: 'Accounting' },
     { id: 'work-orders', label: 'Work Orders' },
+    { id: 'service-plans', label: 'Service Plans' },
     { id: 'contacts', label: 'Contacts' },
     { id: 'communications', label: 'Communications' },
     { id: 'photos', label: 'Photos' },
@@ -598,6 +600,9 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
           />
         )}
         {activeTab === 'work-orders' && <WorkOrdersTab companyId={company.id} />}
+        {activeTab === 'service-plans' && (
+          <CustomerPlansTab companyId={company.id} companyName={company.name} onOpenInvoice={onOpenInvoice} onViewCustomer={onViewCustomer} />
+        )}
         {activeTab === 'contacts' && (
           <ContactsTab
             companyId={company.id}

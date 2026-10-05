@@ -20,6 +20,7 @@ import Warehouses from './pages/Inventory/Warehouses';
 import Distributors from './pages/Inventory/Distributors';
 import PurchaseOrders from './pages/Inventory/PurchaseOrders';
 import Products from './pages/Inventory/Products';
+import ServicePlans from './pages/ServicePlans';
 import Packages from './pages/Inventory/Packages';
 import SiteInventory from './pages/Inventory/SiteInventory';
 import Estimates from './pages/Accounting/Estimates';
@@ -122,6 +123,8 @@ function App() {
         return <Distributors />;
       case 'purchase-orders':
         return <PurchaseOrders />;
+      case 'service-plans':
+        return <ServicePlans onOpenInvoice={openInvoice} onViewCustomer={navigateToCustomer} />;
       case 'products':
         return <Products />;
       case 'packages':

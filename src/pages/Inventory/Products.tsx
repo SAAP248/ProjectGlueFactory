@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, X, Box, CreditCard as Edit2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Search, X, Box, CreditCard as Edit2, ToggleLeft, ToggleRight, ShieldCheck } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import PlanCatalog from '../ServicePlans/Catalog/PlanCatalog';
 
 interface Product {
   id: string;
@@ -32,6 +33,30 @@ const EMPTY_FORM: Omit<Product, 'id'> = {
 };
 
 export default function Products() {
+  const [view, setView] = useState<'products' | 'plans'>('products');
+  return (
+    <div>
+      <div className="px-6 pt-6">
+        <div className="inline-flex rounded-xl bg-gray-100 p-1">
+          {([['products', 'Products', Box], ['plans', 'Service Plans', ShieldCheck]] as const).map(([id, label, Icon]) => (
+            <button key={id} onClick={() => setView(id)}
+              className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${view === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
+              <Icon className="h-4 w-4" /> {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {view === 'products' ? <ProductList /> : (
+        <div className="p-6">
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Service Plan Catalog</h1>
+          <PlanCatalog />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProductList() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');

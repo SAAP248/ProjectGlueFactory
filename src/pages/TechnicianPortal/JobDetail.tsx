@@ -10,6 +10,7 @@ import CompleteJobModal from './CompleteJobModal';
 import SystemAccessPanel from './SystemAccessPanel';
 import SiteInventoryPanel from './SiteInventoryPanel';
 import PartsUsedPanel from './PartsUsedPanel';
+import PlanCoverageBanner from '../ServicePlans/PlanCoverageBanner';
 
 interface Props {
   job: TechWO;
@@ -107,6 +108,8 @@ export default function JobDetail({ job, onBack, onAction, onSaveNotes, techId }
               </span>
             </div>
           )}
+
+          <PlanCoverageBanner workOrderId={job.id} />
 
           {/* Job Info Card */}
           <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100">
