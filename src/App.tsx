@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
+import type { SearchRecordType } from './components/GlobalSearch/searchApi';
 import { useRole } from './contexts/RoleContext';
 import { canAccessPage } from './config/roleAccess';
 import { ROLE_META } from './config/roles';
@@ -48,6 +49,9 @@ function App() {
   const [pageFilter, setPageFilter] = useState<string | undefined>(undefined);
   const [pendingInspectionId, setPendingInspectionId] = useState<string | null>(null);
   const [pendingInvoiceId, setPendingInvoiceId] = useState<string | null>(null);
+  const [pendingWorkOrderId, setPendingWorkOrderId] = useState<string | null>(null);
+  const [pendingAgreementId, setPendingAgreementId] = useState<string | null>(null);
+  const [searchNavKey, setSearchNavKey] = useState(0);
 
   useEffect(() => {
     if (!canAccessPage(role, currentPage)) {
@@ -62,6 +66,8 @@ function App() {
   const navigateTo = useCallback((page: string, filter?: string) => {
     setPageFilter(filter);
     setPendingInvoiceId(null);
+    setPendingWorkOrderId(null);
+    setPendingAgreementId(null);
     setCurrentPage(page);
   }, []);
 
@@ -73,6 +79,20 @@ function App() {
   const openInvoice = (invoiceId: string) => {
     setPendingInvoiceId(invoiceId);
     setCurrentPage('invoices');
+  };
+
+  const openSearchRecord = (type: SearchRecordType, id: string) => {
+    setSearchNavKey(k => k + 1);
+    if (type === 'customer') { navigateToCustomer(id); return; }
+    if (type === 'invoice') { openInvoice(id); return; }
+    if (type === 'work_order') {
+      setPageFilter(undefined);
+      setPendingWorkOrderId(id);
+      setCurrentPage('work-orders');
+      return;
+    }
+    setPendingAgreementId(id);
+    setCurrentPage('service-plans');
   };
 
   const renderPage = () => {
@@ -90,6 +110,7 @@ function App() {
       case 'customer-profile':
         return (
           <CustomerProfile
+            key={`cp-${selectedCustomerId}-${searchNavKey}`}
             customerId={selectedCustomerId}
             onBack={() => setCurrentPage('customers')}
             onViewCustomer={navigateToCustomer}
@@ -107,7 +128,7 @@ function App() {
       case 'projects':
         return <ProjectManagement />;
       case 'work-orders':
-        return <WorkOrders initialFilter={pageFilter} onNavigateToInspection={(inspId) => {
+        return <WorkOrders key={`wo-${searchNavKey}`} initialFilter={pageFilter} initialWorkOrderId={pendingWorkOrderId} onNavigateToInspection={(inspId) => {
           setPendingInspectionId(inspId);
           setCurrentPage('inspections');
         }} />;
@@ -124,7 +145,7 @@ function App() {
       case 'purchase-orders':
         return <PurchaseOrders />;
       case 'service-plans':
-        return <ServicePlans onOpenInvoice={openInvoice} onViewCustomer={navigateToCustomer} />;
+        return <ServicePlans key={`sp-${searchNavKey}`} initialAgreementId={pendingAgreementId} onOpenInvoice={openInvoice} onViewCustomer={navigateToCustomer} />;
       case 'products':
         return <Products />;
       case 'packages':
@@ -134,7 +155,7 @@ function App() {
       case 'estimates':
         return <Estimates onOpenInvoice={openInvoice} />;
       case 'invoices':
-        return <Invoices key={pendingInvoiceId ?? 'list'} initialInvoiceId={pendingInvoiceId} />;
+        return <Invoices key={`${pendingInvoiceId ?? 'list'}-${searchNavKey}`} initialInvoiceId={pendingInvoiceId} />;
       case 'statements':
         return <Statements />;
       case 'transactions':
@@ -166,7 +187,7 @@ function App() {
     <div className="flex h-screen bg-gray-50">
       <Sidebar
         currentPage={currentPage}
-        setCurrentPage={(page: string) => { setPageFilter(undefined); setPendingInvoiceId(null); setCurrentPage(page); }}
+        setCurrentPage={(page: string) => { setPageFilter(undefined); setPendingInvoiceId(null); setPendingWorkOrderId(null); setPendingAgreementId(null); setCurrentPage(page); }}
         collapsed={sidebarCollapsed}
         setCollapsed={setSidebarCollapsed}
       />
@@ -174,6 +195,7 @@ function App() {
         <Header
           onMenuClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           onRoleChange={handleRoleChange}
+          onOpenRecord={openSearchRecord}
         />
         <main className="flex-1 overflow-y-auto">
           {renderPage()}

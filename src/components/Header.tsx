@@ -1,14 +1,17 @@
 import { useState } from 'react';
-import { Menu, Search, Bell, User } from 'lucide-react';
+import { Menu, Bell, User } from 'lucide-react';
 import RoleSwitcher from './RoleSwitcher';
+import GlobalSearch from './GlobalSearch';
+import type { SearchRecordType } from './GlobalSearch/searchApi';
 import { useRole } from '../contexts/RoleContext';
 
 interface HeaderProps {
   onMenuClick: () => void;
   onRoleChange?: () => void;
+  onOpenRecord: (type: SearchRecordType, id: string) => void;
 }
 
-export default function Header({ onMenuClick, onRoleChange }: HeaderProps) {
+export default function Header({ onMenuClick, onRoleChange, onOpenRecord }: HeaderProps) {
   const { meta } = useRole();
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -43,14 +46,7 @@ export default function Header({ onMenuClick, onRoleChange }: HeaderProps) {
         >
           <Menu className="h-5 w-5" />
         </button>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search customers, work orders, invoices..."
-            className="pl-10 pr-4 py-2 w-80 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
+        <GlobalSearch onOpenRecord={onOpenRecord} />
       </div>
 
       <div className="flex items-center space-x-4">

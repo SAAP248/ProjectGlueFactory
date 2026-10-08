@@ -8,11 +8,12 @@ type View = { type: 'list' } | { type: 'detail'; id: string };
 
 interface Props {
   initialFilter?: string;
+  initialWorkOrderId?: string | null;
   onNavigateToInspection?: (inspectionId: string) => void;
 }
 
-export default function WorkOrders({ initialFilter, onNavigateToInspection }: Props) {
-  const [view, setView] = useState<View>({ type: 'list' });
+export default function WorkOrders({ initialFilter, initialWorkOrderId, onNavigateToInspection }: Props) {
+  const [view, setView] = useState<View>(initialWorkOrderId ? { type: 'detail', id: initialWorkOrderId } : { type: 'list' });
   const [editId, setEditId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [inspectionModalForWO, setInspectionModalForWO] = useState<string | null>(null);
