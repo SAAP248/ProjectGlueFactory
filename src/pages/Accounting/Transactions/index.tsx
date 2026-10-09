@@ -2,9 +2,7 @@ import { useMemo } from 'react';
 import { AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import DateRangePicker from '../../../components/DateRangePicker';
 import { inRange, useDateRange } from '../../../lib/dateRange';
-import TopCustomers from './TopCustomers';
 import TransactionStats from './TransactionStats';
-import TransactionsChart from './TransactionsChart';
 import TransactionsTable from './TransactionsTable';
 import { summarize, useTransactions } from './useTransactions';
 
@@ -48,12 +46,6 @@ export default function Transactions({ onOpenInvoice }: { onOpenInvoice?: (invoi
       ) : (
         <div className="space-y-6 animate-fade-in">
           <TransactionStats current={current} previous={prior} previousLabel={previous?.label ?? null} />
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            <div className="xl:col-span-2">
-              <TransactionsChart transactions={transactions} range={range} />
-            </div>
-            <TopCustomers transactions={transactions} range={range} />
-          </div>
           <TransactionsTable transactions={inPeriod} onOpenInvoice={onOpenInvoice} />
         </div>
       )}
