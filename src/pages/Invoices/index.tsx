@@ -8,6 +8,12 @@ import ConsolidatedInvoiceDetail from './ConsolidatedInvoiceDetail';
 import NewConsolidatedModal from './NewConsolidatedModal';
 import InvoiceListTable, { type ListRow } from './InvoiceListTable';
 import { formatCurrency } from './invoiceFormat';
+import { invoiceDate, invoicePeriodStats } from './invoiceStats';
+import DateRangePicker from '../../components/DateRangePicker';
+import DeltaBadge from '../../components/DeltaBadge';
+import PeriodStatCard from '../../components/PeriodStatCard';
+import { inRange, useDateRange } from '../../lib/dateRange';
+import { summarize as summarizeTxns, useTransactions } from '../Accounting/Transactions/useTransactions';
 
 const STATUS_TABS = [
   { key: '', label: 'All' },
@@ -36,9 +42,7 @@ function matchesInvoice(inv: Invoice, term: string) {
 }
 
 function rowDate(row: ListRow) {
-  return row.kind === 'ci'
-    ? row.ci.invoice_date || row.ci.created_at
-    : row.inv.invoice_date || row.inv.created_at;
+  return row.kind === 'ci' ? row.ci.invoice_date || row.ci.created_at : invoiceDate(row.inv);
 }
 
 export default function Invoices({ initialInvoiceId = null }: { initialInvoiceId?: string | null }) {
@@ -54,13 +58,16 @@ export default function Invoices({ initialInvoiceId = null }: { initialInvoiceId
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selection, setSelection] = useState<Map<string, Invoice>>(new Map());
 
-  const { invoices, loading, stats, refetch } = useInvoiceList(searchTerm, statusFilter);
+  const { invoices, loading, refetch } = useInvoiceList();
   const { items: consolidated, loading: ciLoading, refetch: refetchCi } = useConsolidatedList();
+  const { transactions, refetch: refetchTxns } = useTransactions();
+  const { selection: rangeSel, setSelection: setRangeSel, range, previous } = useDateRange('invoices');
 
   const refreshAll = useCallback(() => {
     refetch();
     refetchCi();
-  }, [refetch, refetchCi]);
+    refetchTxns();
+  }, [refetch, refetchCi, refetchTxns]);
 
   const ciNumbers = useMemo(
     () => new Map(consolidated.map((c) => [c.id, c.consolidated_number])),
@@ -70,6 +77,7 @@ export default function Invoices({ initialInvoiceId = null }: { initialInvoiceId
   const rows: ListRow[] = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     const ciRows: ListRow[] = consolidated
+      .filter((ci) => inRange(ci.invoice_date || ci.created_at, range))
       .map((ci) => {
         const summary = summarize(ci);
         const matched = new Set(term ? ci.invoices.filter((i) => matchesInvoice(i, term)).map((i) => i.id) : []);
@@ -88,12 +96,27 @@ export default function Invoices({ initialInvoiceId = null }: { initialInvoiceId
 
     const invRows: ListRow[] = invoices
       .filter((inv) => typeFilter === 'regular' || !inv.consolidated_invoice_id)
+      .filter((inv) => inRange(invoiceDate(inv), range))
+      .filter((inv) => !statusFilter || inv.status === statusFilter)
+      .filter((inv) => !term || matchesInvoice(inv, term))
       .map((inv) => ({ kind: 'inv' as const, inv }));
 
     const combined =
       typeFilter === 'consolidated' ? ciRows : typeFilter === 'regular' ? invRows : [...ciRows, ...invRows];
     return combined.sort((a, b) => rowDate(b).localeCompare(rowDate(a)));
-  }, [consolidated, invoices, searchTerm, statusFilter, typeFilter]);
+  }, [consolidated, invoices, searchTerm, statusFilter, typeFilter, range]);
+
+  const periodStats = useMemo(() => {
+    const cur = invoicePeriodStats(invoices, range);
+    const prev = previous ? invoicePeriodStats(invoices, previous) : null;
+    const collected = summarizeTxns(transactions, range).net;
+    const prevCollected = previous ? summarizeTxns(transactions, previous).net : undefined;
+    const openCi = consolidated.filter((c) => {
+      const s = summarize(c).status;
+      return s !== 'paid' && s !== 'void' && inRange(c.invoice_date || c.created_at, range);
+    });
+    return { cur, prev, collected, prevCollected, openCi };
+  }, [invoices, transactions, consolidated, range, previous]);
 
   const effectiveExpanded = useMemo(() => {
     const next = new Set(expanded);
@@ -183,17 +206,42 @@ export default function Invoices({ initialInvoiceId = null }: { initialInvoiceId
     );
   }
 
-  const openCiCount = consolidated.filter((c) => {
-    const s = summarize(c).status;
-    return s !== 'paid' && s !== 'void';
-  }).length;
+  const { cur, prev, collected, prevCollected, openCi } = periodStats;
+  const openCiBalance = openCi.reduce((s, c) => s + summarize(c).balance, 0);
 
   const statCards = [
-    { label: 'Total Invoices', value: stats.totalCount.toString(), icon: FileText, iconColor: 'text-blue-600', bgLight: 'bg-blue-50' },
-    { label: 'Outstanding', value: formatCurrency(stats.outstandingBalance), icon: Clock, iconColor: 'text-amber-600', bgLight: 'bg-amber-50' },
-    { label: 'Paid This Month', value: formatCurrency(stats.paidThisMonth), icon: CheckCircle2, iconColor: 'text-emerald-600', bgLight: 'bg-emerald-50' },
-    { label: 'Overdue', value: stats.overdueCount.toString(), icon: AlertTriangle, iconColor: 'text-red-600', bgLight: 'bg-red-50' },
-    { label: 'Open Consolidated', value: openCiCount.toString(), icon: Layers, iconColor: 'text-teal-600', bgLight: 'bg-teal-50' },
+    {
+      label: 'Invoices Issued',
+      value: cur.issued.toLocaleString(),
+      sub: `${formatCurrency(cur.billed)} billed`,
+      delta: prev && <DeltaBadge cur={cur.billed} prev={prev.billed} />,
+      icon: FileText, iconColor: 'text-blue-600', bgLight: 'bg-blue-50',
+    },
+    {
+      label: 'Outstanding',
+      value: formatCurrency(cur.outstanding),
+      sub: `${cur.openCount} unpaid invoice${cur.openCount === 1 ? '' : 's'}`,
+      icon: Clock, iconColor: 'text-amber-600', bgLight: 'bg-amber-50',
+    },
+    {
+      label: 'Collected',
+      value: formatCurrency(collected),
+      sub: 'Payments received in period',
+      delta: <DeltaBadge cur={collected} prev={prevCollected} />,
+      icon: CheckCircle2, iconColor: 'text-emerald-600', bgLight: 'bg-emerald-50',
+    },
+    {
+      label: 'Overdue',
+      value: cur.overdueCount.toString(),
+      sub: `${formatCurrency(cur.overdueAmount)} past due`,
+      icon: AlertTriangle, iconColor: 'text-red-600', bgLight: 'bg-red-50',
+    },
+    {
+      label: 'Open Consolidated',
+      value: openCi.length.toString(),
+      sub: `${formatCurrency(openCiBalance)} balance`,
+      icon: Layers, iconColor: 'text-teal-600', bgLight: 'bg-teal-50',
+    },
   ];
 
   const isLoading = loading || ciLoading;
@@ -205,7 +253,8 @@ export default function Invoices({ initialInvoiceId = null }: { initialInvoiceId
           <h1 className="text-2xl font-bold text-gray-900">Invoices</h1>
           <p className="text-gray-500 mt-1">Regular and consolidated invoices in one place</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangePicker selection={rangeSel} range={range} onChange={setRangeSel} />
           <button
             onClick={() => setNewCi({ companyId: null, ids: [] })}
             className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-semibold text-sm transition-colors"
@@ -224,21 +273,8 @@ export default function Invoices({ initialInvoiceId = null }: { initialInvoiceId
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-        {statCards.map((stat) => (
-          <div
-            key={stat.label}
-            className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">{stat.label}</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</p>
-              </div>
-              <div className={`${stat.bgLight} w-11 h-11 rounded-xl flex items-center justify-center`}>
-                <stat.icon className={`h-5 w-5 ${stat.iconColor}`} />
-              </div>
-            </div>
-          </div>
+        {statCards.map(({ label, ...rest }) => (
+          <PeriodStatCard key={label} label={label} {...rest} />
         ))}
       </div>
 
@@ -321,8 +357,8 @@ export default function Invoices({ initialInvoiceId = null }: { initialInvoiceId
             <FileText className="h-10 w-10 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500 font-medium">No invoices found</p>
             <p className="text-sm text-gray-400 mt-1">
-              {searchTerm || statusFilter || typeFilter !== 'all'
-                ? 'Try adjusting your search or filters'
+              {searchTerm || statusFilter || typeFilter !== 'all' || range.from
+                ? 'Try adjusting your search, filters or date range'
                 : 'Create your first invoice to get started'}
             </p>
           </div>

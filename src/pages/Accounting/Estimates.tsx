@@ -1,22 +1,50 @@
 import { useMemo, useState } from 'react';
-import { Plus, FileText, Search, Clock, CheckCircle2, DollarSign, AlertCircle, Loader2, Eye, MessageSquare, BookOpen, PenLine } from 'lucide-react';
-import { useEstimateList, ESTIMATE_STATUSES, estimateStatusStyles, formatMoney, formatDate } from '../Estimates/useEstimates';
+import { Plus, FileText, Search, Clock, CheckCircle2, DollarSign, AlertCircle, Loader2, Eye, MessageSquare, BookOpen, PenLine, Percent } from 'lucide-react';
+import { useEstimateList, ESTIMATE_STATUSES, estimateStatusStyles, formatMoney, formatDate, type EstimateRecord as Estimate } from '../Estimates/useEstimates';
 import EstimatePanel from '../Estimates/EstimatePanel';
+import DateRangePicker from '../../components/DateRangePicker';
+import DeltaBadge from '../../components/DeltaBadge';
+import PeriodStatCard from '../../components/PeriodStatCard';
+import { inRange, useDateRange, type DateRange } from '../../lib/dateRange';
 
 interface Props {
   onOpenInvoice?: (invoiceId: string) => void;
 }
 
+function periodStats(estimates: Estimate[], range: DateRange) {
+  const list = estimates.filter((e) => inRange(e.estimate_date || e.created_at, range));
+  const sum = (xs: Estimate[]) => xs.reduce((s, e) => s + (Number(e.total) || 0), 0);
+  const pending = list.filter((e) => e.status === 'draft' || e.status === 'sent');
+  const approved = list.filter((e) => e.status === 'approved');
+  const decided = list.filter((e) => e.status === 'approved' || e.status === 'declined' || e.status === 'expired');
+  return {
+    count: list.length,
+    value: sum(list),
+    pendingCount: pending.length,
+    pendingValue: sum(pending),
+    approvedCount: approved.length,
+    approvedValue: sum(approved),
+    decidedCount: decided.length,
+    approvalRate: decided.length ? (approved.length / decided.length) * 100 : 0,
+  };
+}
+
 export default function Estimates({ onOpenInvoice }: Props) {
   const { estimates, convertedIds, unreadCounts, loading, error, refetch } = useEstimateList();
+  const { selection: rangeSel, setSelection: setRangeSel, range, previous } = useDateRange('estimates');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
+  const inPeriod = useMemo(
+    () => estimates.filter((e) => inRange(e.estimate_date || e.created_at, range)),
+    [estimates, range]
+  );
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return estimates.filter((e) => {
+    return inPeriod.filter((e) => {
       if (status && e.status !== status) return false;
       if (!term) return true;
       return (
@@ -24,18 +52,45 @@ export default function Estimates({ onOpenInvoice }: Props) {
         (e.companies?.name || '').toLowerCase().includes(term)
       );
     });
-  }, [estimates, search, status]);
+  }, [inPeriod, search, status]);
 
   const stats = useMemo(() => {
-    const pending = estimates.filter((e) => e.status === 'draft' || e.status === 'sent');
-    const approved = estimates.filter((e) => e.status === 'approved');
+    const c = periodStats(estimates, range);
+    const p = previous ? periodStats(estimates, previous) : null;
     return [
-      { label: 'Total Estimates', value: String(estimates.length), icon: FileText, tone: 'bg-blue-50 text-blue-600' },
-      { label: 'Pending', value: String(pending.length), sub: formatMoney(pending.reduce((s, e) => s + Number(e.total), 0)), icon: Clock, tone: 'bg-amber-50 text-amber-600' },
-      { label: 'Approved', value: String(approved.length), sub: formatMoney(approved.reduce((s, e) => s + Number(e.total), 0)), icon: CheckCircle2, tone: 'bg-emerald-50 text-emerald-600' },
-      { label: 'Total Value', value: formatMoney(estimates.reduce((s, e) => s + Number(e.total), 0)), icon: DollarSign, tone: 'bg-teal-50 text-teal-600' },
+      {
+        label: 'Total Value',
+        value: formatMoney(c.value),
+        sub: `${c.count} estimate${c.count === 1 ? '' : 's'}`,
+        delta: p && <DeltaBadge cur={c.value} prev={p.value} />,
+        icon: DollarSign, iconColor: 'text-teal-600', bgLight: 'bg-teal-50',
+      },
+      {
+        label: 'Pending',
+        value: String(c.pendingCount),
+        sub: `${formatMoney(c.pendingValue)} awaiting decision`,
+        icon: Clock, iconColor: 'text-amber-600', bgLight: 'bg-amber-50',
+      },
+      {
+        label: 'Approved',
+        value: String(c.approvedCount),
+        sub: `${formatMoney(c.approvedValue)} won`,
+        delta: p && <DeltaBadge cur={c.approvedValue} prev={p.approvedValue} />,
+        icon: CheckCircle2, iconColor: 'text-emerald-600', bgLight: 'bg-emerald-50',
+      },
+      {
+        label: 'Approval Rate',
+        value: c.decidedCount ? `${c.approvalRate.toFixed(0)}%` : '—',
+        sub: c.decidedCount ? `${c.approvedCount} of ${c.decidedCount} decided` : 'No decisions yet',
+        delta: p && p.decidedCount > 0 && c.decidedCount > 0 && (
+          <span className={`text-xs font-semibold rounded-full px-2 py-0.5 ${c.approvalRate >= p.approvalRate ? 'text-emerald-700 bg-emerald-50' : 'text-red-700 bg-red-50'}`}>
+            {c.approvalRate >= p.approvalRate ? '+' : ''}{(c.approvalRate - p.approvalRate).toFixed(0)} pts
+          </span>
+        ),
+        icon: Percent, iconColor: 'text-blue-600', bgLight: 'bg-blue-50',
+      },
     ];
-  }, [estimates]);
+  }, [estimates, range, previous]);
 
   return (
     <div className="p-6">
@@ -44,28 +99,20 @@ export default function Estimates({ onOpenInvoice }: Props) {
           <h1 className="text-2xl font-bold text-gray-900">Estimates</h1>
           <p className="text-gray-600 mt-1">Create, send, and track customer estimates</p>
         </div>
-        <button
-          onClick={() => setCreating(true)}
-          className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors shadow-sm"
-        >
-          <Plus className="h-5 w-5 mr-2" /> New Estimate
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangePicker selection={rangeSel} range={range} onChange={setRangeSel} />
+          <button
+            onClick={() => setCreating(true)}
+            className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors shadow-sm"
+          >
+            <Plus className="h-5 w-5 mr-2" /> New Estimate
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {stats.map((s) => (
-          <div key={s.label} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">{s.label}</p>
-                <p className="text-2xl font-bold text-gray-900 mt-2">{loading ? '—' : s.value}</p>
-                {s.sub && !loading && <p className="text-xs text-gray-500 mt-1">{s.sub}</p>}
-              </div>
-              <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${s.tone}`}>
-                <s.icon className="h-5 w-5" />
-              </div>
-            </div>
-          </div>
+        {stats.map(({ label, value, ...rest }) => (
+          <PeriodStatCard key={label} label={label} value={loading ? '—' : value} {...rest} />
         ))}
       </div>
 
@@ -110,7 +157,7 @@ export default function Estimates({ onOpenInvoice }: Props) {
             <FileText className="h-10 w-10 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-700 font-medium">{estimates.length ? 'No estimates match your filters' : 'No estimates yet'}</p>
             <p className="text-sm text-gray-500 mt-1">
-              {estimates.length ? 'Try a different search or status.' : 'Create your first estimate to get started.'}
+              {estimates.length ? 'Try a different search, status or date range.' : 'Create your first estimate to get started.'}
             </p>
           </div>
         ) : (

@@ -159,7 +159,7 @@ function App() {
       case 'statements':
         return <Statements />;
       case 'transactions':
-        return <Transactions />;
+        return <Transactions onOpenInvoice={openInvoice} />;
       case 'time-attendance':
         return <TimeAttendance />;
       case 'reports':

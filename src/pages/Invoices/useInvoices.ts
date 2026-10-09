@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 
 // ---------------------------------------------------------------------------
@@ -97,13 +97,6 @@ export interface Site {
   notes: string | null;
 }
 
-export interface InvoiceStats {
-  totalCount: number;
-  outstandingBalance: number;
-  paidThisMonth: number;
-  overdueCount: number;
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -121,7 +114,7 @@ function generatePaymentToken(): string {
 // useInvoiceList
 // ---------------------------------------------------------------------------
 
-export function useInvoiceList(searchTerm = '', statusFilter = '') {
+export function useInvoiceList() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -130,74 +123,32 @@ export function useInvoiceList(searchTerm = '', statusFilter = '') {
     setLoading(true);
     setError(null);
 
-    let query = supabase
-      .from('invoices')
-      .select('*, companies(name)')
-      .order('created_at', { ascending: false });
-
-    if (statusFilter) {
-      query = query.eq('status', statusFilter);
-    }
-
-    if (searchTerm) {
-      query = query.or(
-        `invoice_number.ilike.%${searchTerm}%,notes.ilike.%${searchTerm}%,companies.name.ilike.%${searchTerm}%`
-      );
-    }
-
-    const { data, error: fetchError } = await query;
-
-    if (fetchError) {
-      setError(fetchError.message);
-      setInvoices([]);
-    } else {
-      // When searching by company name via the join, Supabase may return rows
-      // where the join didn't match (companies is null). Filter those out when
-      // a search term is active so only genuine matches remain.
-      let results = (data || []) as Invoice[];
-      if (searchTerm) {
-        results = results.filter((inv) => {
-          const term = searchTerm.toLowerCase();
-          const matchesNumber = inv.invoice_number?.toLowerCase().includes(term);
-          const matchesNotes = inv.notes?.toLowerCase().includes(term);
-          const matchesCompany = (inv.companies as { name: string } | null)?.name
-            ?.toLowerCase()
-            .includes(term);
-          return matchesNumber || matchesNotes || matchesCompany;
-        });
+    const all: Invoice[] = [];
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error: fetchError } = await supabase
+        .from('invoices')
+        .select('*, companies(name)')
+        .order('created_at', { ascending: false })
+        .range(from, from + PAGE - 1);
+      if (fetchError) {
+        setError(fetchError.message);
+        setInvoices([]);
+        setLoading(false);
+        return;
       }
-      setInvoices(results);
+      all.push(...((data || []) as Invoice[]));
+      if (!data || data.length < PAGE) break;
     }
-
+    setInvoices(all);
     setLoading(false);
-  }, [searchTerm, statusFilter]);
+  }, []);
 
   useEffect(() => {
     fetchInvoices();
   }, [fetchInvoices]);
 
-  const stats: InvoiceStats = useMemo(() => {
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-
-    return {
-      totalCount: invoices.length,
-      outstandingBalance: invoices.reduce((sum, inv) => sum + (Number(inv.balance_due) || 0), 0),
-      paidThisMonth: invoices.reduce((sum, inv) => {
-        if (inv.status === 'paid' && inv.updated_at >= monthStart) {
-          return sum + (Number(inv.amount_paid) || 0);
-        }
-        return sum;
-      }, 0),
-      overdueCount: invoices.filter((inv) => {
-        if (inv.status === 'paid' || inv.status === 'void') return false;
-        if (!inv.due_date) return false;
-        return new Date(inv.due_date) < now && (Number(inv.balance_due) || 0) > 0;
-      }).length,
-    };
-  }, [invoices]);
-
-  return { invoices, loading, error, refetch: fetchInvoices, stats };
+  return { invoices, loading, error, refetch: fetchInvoices };
 }
 
 // ---------------------------------------------------------------------------
