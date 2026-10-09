@@ -2,8 +2,6 @@ import { useState } from 'react';
 import { AlertTriangle, Check, Pencil, Plus, ShieldAlert, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Company } from './types';
-import type { PastDueSummary } from './pastDue';
-import { PastDueCard } from './PastDueStatus';
 
 type Tone = 'red' | 'amber';
 
@@ -125,15 +123,11 @@ function NoteCard({ tone, icon: Icon, title, text, emptyText, placeholder, meta,
 
 interface Props {
   company: Company;
-  pastDue: PastDueSummary;
-  showPastDue: boolean;
-  onViewPastDue: () => void;
-  onDismissPastDue: () => void;
   onRemoveTroubleFlag: () => void;
   onCompanyChange: (patch: Partial<Company>) => void;
 }
 
-export default function CustomerAlerts({ company, pastDue, showPastDue, onViewPastDue, onDismissPastDue, onRemoveTroubleFlag, onCompanyChange }: Props) {
+export default function CustomerAlerts({ company, onRemoveTroubleFlag, onCompanyChange }: Props) {
   const [addingNote, setAddingNote] = useState(false);
   const troubleFlaggedAt = company.trouble_flagged_at
     ? `Flagged ${new Date(company.trouble_flagged_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
@@ -166,8 +160,6 @@ export default function CustomerAlerts({ company, pastDue, showPastDue, onViewPa
           }
         />
       )}
-
-      {showPastDue && <PastDueCard summary={pastDue} onView={onViewPastDue} onDismiss={onDismissPastDue} />}
 
       {company.critical_notes || addingNote ? (
         <NoteCard

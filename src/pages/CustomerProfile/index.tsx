@@ -75,7 +75,6 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
   const [savingTrouble, setSavingTrouble] = useState(false);
   const [parent, setParent] = useState<ParentSummary | null>(null);
   const [subCustomers, setSubCustomers] = useState<SubCustomerSummary[]>([]);
-  const [pastDueBannerDismissedFor, setPastDueBannerDismissedFor] = useState<string | null>(null);
   const [accountingView, setAccountingView] = useState({ overdueOnly: false, key: 0 });
 
   const TABS = [
@@ -189,7 +188,6 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
 
   const isCommercial = company.customer_type === 'commercial';
   const pastDue = getPastDueSummary(invoices);
-  const showPastDueAlert = pastDue.count > 0 && pastDue.oldestDays > 30 && pastDueBannerDismissedFor !== company.id;
 
   function openOverdueInvoices() {
     setAccountingView(v => ({ overdueOnly: true, key: v.key + 1 }));
@@ -423,10 +421,6 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
               </div>
               <CustomerAlerts
                 company={company}
-                pastDue={pastDue}
-                showPastDue={showPastDueAlert}
-                onViewPastDue={openOverdueInvoices}
-                onDismissPastDue={() => setPastDueBannerDismissedFor(company.id)}
                 onRemoveTroubleFlag={toggleTroubleCustomer}
                 onCompanyChange={patch => setCompany(c => (c ? { ...c, ...patch } : c))}
               />
