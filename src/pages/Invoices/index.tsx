@@ -1,8 +1,13 @@
-import { useState, useCallback } from 'react';
-import { Plus, DollarSign, Search, FileText, AlertTriangle, Clock, CheckCircle2, Filter } from 'lucide-react';
-import { useInvoiceList } from './useInvoices';
+import { useState, useCallback, useMemo } from 'react';
+import { Plus, Search, FileText, AlertTriangle, Clock, CheckCircle2, Layers, X } from 'lucide-react';
+import { useInvoiceList, type Invoice } from './useInvoices';
+import { useConsolidatedList, summarize } from './consolidated';
 import InvoiceDetail from './InvoiceDetail';
 import NewInvoiceSlideOver from './NewInvoiceSlideOver';
+import ConsolidatedInvoiceDetail from './ConsolidatedInvoiceDetail';
+import NewConsolidatedModal from './NewConsolidatedModal';
+import InvoiceListTable, { type ListRow } from './InvoiceListTable';
+import { formatCurrency } from './invoiceFormat';
 
 const STATUS_TABS = [
   { key: '', label: 'All' },
@@ -14,118 +19,211 @@ const STATUS_TABS = [
   { key: 'void', label: 'Void' },
 ];
 
-const STATUS_COLORS: Record<string, string> = {
-  draft: 'bg-gray-100 text-gray-700',
-  sent: 'bg-blue-100 text-blue-700',
-  paid: 'bg-emerald-100 text-emerald-700',
-  partial: 'bg-amber-100 text-amber-700',
-  overdue: 'bg-red-100 text-red-700',
-  void: 'bg-gray-100 text-gray-500',
-};
+type TypeFilter = 'all' | 'regular' | 'consolidated';
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: 'Draft',
-  sent: 'Open',
-  paid: 'Paid',
-  partial: 'Partial',
-  overdue: 'Overdue',
-  void: 'Void',
-};
+const TYPE_TABS: { key: TypeFilter; label: string }[] = [
+  { key: 'all', label: 'All types' },
+  { key: 'regular', label: 'Invoices' },
+  { key: 'consolidated', label: 'Consolidated' },
+];
 
-function formatCurrency(v: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v);
+function matchesInvoice(inv: Invoice, term: string) {
+  return (
+    inv.invoice_number?.toLowerCase().includes(term) ||
+    inv.notes?.toLowerCase().includes(term) ||
+    inv.companies?.name?.toLowerCase().includes(term)
+  );
 }
 
-function formatDate(d: string | null) {
-  if (!d) return '-';
-  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+function rowDate(row: ListRow) {
+  return row.kind === 'ci'
+    ? row.ci.invoice_date || row.ci.created_at
+    : row.inv.invoice_date || row.inv.created_at;
 }
 
 export default function Invoices({ initialInvoiceId = null }: { initialInvoiceId?: string | null }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(initialInvoiceId);
+  const [selectedCiId, setSelectedCiId] = useState<string | null>(null);
+  const [returnToCiId, setReturnToCiId] = useState<string | null>(null);
   const [showNewInvoice, setShowNewInvoice] = useState(false);
+  const [newCi, setNewCi] = useState<{ companyId: string | null; ids: string[] } | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [selection, setSelection] = useState<Map<string, Invoice>>(new Map());
 
   const { invoices, loading, stats, refetch } = useInvoiceList(searchTerm, statusFilter);
+  const { items: consolidated, loading: ciLoading, refetch: refetchCi } = useConsolidatedList();
 
-  const handleViewInvoice = useCallback((id: string) => {
-    setSelectedInvoiceId(id);
-  }, []);
-
-  const handleBack = useCallback(() => {
-    setSelectedInvoiceId(null);
+  const refreshAll = useCallback(() => {
     refetch();
-  }, [refetch]);
+    refetchCi();
+  }, [refetch, refetchCi]);
 
-  const handleInvoiceCreated = useCallback((id: string) => {
-    setShowNewInvoice(false);
-    setSelectedInvoiceId(id);
-    refetch();
-  }, [refetch]);
+  const ciNumbers = useMemo(
+    () => new Map(consolidated.map((c) => [c.id, c.consolidated_number])),
+    [consolidated]
+  );
+
+  const rows: ListRow[] = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    const ciRows: ListRow[] = consolidated
+      .map((ci) => {
+        const summary = summarize(ci);
+        const matched = new Set(term ? ci.invoices.filter((i) => matchesInvoice(i, term)).map((i) => i.id) : []);
+        return { kind: 'ci' as const, ci, summary, matched };
+      })
+      .filter(({ ci, summary, matched }) => {
+        if (statusFilter && summary.status !== statusFilter) return false;
+        if (!term) return true;
+        return (
+          ci.consolidated_number.toLowerCase().includes(term) ||
+          ci.companies?.name?.toLowerCase().includes(term) ||
+          ci.notes?.toLowerCase().includes(term) ||
+          matched.size > 0
+        );
+      });
+
+    const invRows: ListRow[] = invoices
+      .filter((inv) => typeFilter === 'regular' || !inv.consolidated_invoice_id)
+      .map((inv) => ({ kind: 'inv' as const, inv }));
+
+    const combined =
+      typeFilter === 'consolidated' ? ciRows : typeFilter === 'regular' ? invRows : [...ciRows, ...invRows];
+    return combined.sort((a, b) => rowDate(b).localeCompare(rowDate(a)));
+  }, [consolidated, invoices, searchTerm, statusFilter, typeFilter]);
+
+  const effectiveExpanded = useMemo(() => {
+    const next = new Set(expanded);
+    rows.forEach((r) => {
+      if (r.kind === 'ci' && r.matched.size > 0) next.add(r.ci.id);
+    });
+    collapsed.forEach((id) => next.delete(id));
+    return next;
+  }, [expanded, collapsed, rows]);
+
+  const selectedList = [...selection.values()];
+  const selectionCompanies = new Set(selectedList.map((i) => i.company_id));
+  const canConsolidate = selectedList.length >= 2 && selectionCompanies.size === 1;
+
+  const toggleExpand = (id: string) => {
+    const open = effectiveExpanded.has(id);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (open) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (open) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleSelect = (inv: Invoice) =>
+    setSelection((prev) => {
+      const next = new Map(prev);
+      if (next.has(inv.id)) next.delete(inv.id);
+      else next.set(inv.id, inv);
+      return next;
+    });
+
+  const openInvoice = useCallback((id: string) => setSelectedInvoiceId(id), []);
+
+  const handleInvoiceCreated = useCallback(
+    (id: string) => {
+      setShowNewInvoice(false);
+      setSelectedInvoiceId(id);
+      refetch();
+    },
+    [refetch]
+  );
+
+  const handleCiCreated = (id: string) => {
+    setNewCi(null);
+    setSelection(new Map());
+    setSelectedCiId(id);
+    refreshAll();
+  };
 
   if (selectedInvoiceId) {
-    return <InvoiceDetail invoiceId={selectedInvoiceId} onBack={handleBack} />;
+    return (
+      <InvoiceDetail
+        invoiceId={selectedInvoiceId}
+        onBack={() => {
+          setSelectedInvoiceId(null);
+          if (returnToCiId) {
+            setSelectedCiId(returnToCiId);
+            setReturnToCiId(null);
+          }
+          refreshAll();
+        }}
+      />
+    );
   }
 
+  if (selectedCiId) {
+    return (
+      <ConsolidatedInvoiceDetail
+        consolidatedId={selectedCiId}
+        onBack={() => {
+          setSelectedCiId(null);
+          refreshAll();
+        }}
+        onOpenInvoice={(id) => {
+          setReturnToCiId(selectedCiId);
+          setSelectedCiId(null);
+          setSelectedInvoiceId(id);
+        }}
+      />
+    );
+  }
+
+  const openCiCount = consolidated.filter((c) => {
+    const s = summarize(c).status;
+    return s !== 'paid' && s !== 'void';
+  }).length;
+
   const statCards = [
-    {
-      label: 'Total Invoices',
-      value: stats.totalCount.toString(),
-      icon: FileText,
-      color: 'bg-blue-500',
-      iconColor: 'text-blue-600',
-      bgLight: 'bg-blue-50',
-    },
-    {
-      label: 'Outstanding',
-      value: formatCurrency(stats.outstandingBalance),
-      icon: Clock,
-      color: 'bg-amber-500',
-      iconColor: 'text-amber-600',
-      bgLight: 'bg-amber-50',
-    },
-    {
-      label: 'Paid This Month',
-      value: formatCurrency(stats.paidThisMonth),
-      icon: CheckCircle2,
-      color: 'bg-emerald-500',
-      iconColor: 'text-emerald-600',
-      bgLight: 'bg-emerald-50',
-    },
-    {
-      label: 'Overdue',
-      value: stats.overdueCount.toString(),
-      icon: AlertTriangle,
-      color: 'bg-red-500',
-      iconColor: 'text-red-600',
-      bgLight: 'bg-red-50',
-    },
+    { label: 'Total Invoices', value: stats.totalCount.toString(), icon: FileText, iconColor: 'text-blue-600', bgLight: 'bg-blue-50' },
+    { label: 'Outstanding', value: formatCurrency(stats.outstandingBalance), icon: Clock, iconColor: 'text-amber-600', bgLight: 'bg-amber-50' },
+    { label: 'Paid This Month', value: formatCurrency(stats.paidThisMonth), icon: CheckCircle2, iconColor: 'text-emerald-600', bgLight: 'bg-emerald-50' },
+    { label: 'Overdue', value: stats.overdueCount.toString(), icon: AlertTriangle, iconColor: 'text-red-600', bgLight: 'bg-red-50' },
+    { label: 'Open Consolidated', value: openCiCount.toString(), icon: Layers, iconColor: 'text-teal-600', bgLight: 'bg-teal-50' },
   ];
+
+  const isLoading = loading || ciLoading;
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto">
-      {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Invoices</h1>
-          <p className="text-gray-500 mt-1">Manage customer invoices and payments</p>
+          <p className="text-gray-500 mt-1">Regular and consolidated invoices in one place</p>
         </div>
-        <button
-          onClick={() => setShowNewInvoice(true)}
-          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-semibold text-sm transition-colors shadow-sm"
-        >
-          <Plus className="h-4 w-4" />
-          New Invoice
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setNewCi({ companyId: null, ids: [] })}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-semibold text-sm transition-colors"
+          >
+            <Layers className="h-4 w-4 text-teal-600" />
+            New Consolidated
+          </button>
+          <button
+            onClick={() => setShowNewInvoice(true)}
+            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-semibold text-sm transition-colors shadow-sm"
+          >
+            <Plus className="h-4 w-4" />
+            New Invoice
+          </button>
+        </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         {statCards.map((stat) => (
           <div
             key={stat.label}
@@ -144,30 +242,39 @@ export default function Invoices({ initialInvoiceId = null }: { initialInvoiceId
         ))}
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-5">
-        {/* Search */}
-        <div className="relative flex-1 max-w-md">
+      <div className="flex flex-col xl:flex-row items-start xl:items-center gap-3 mb-5">
+        <div className="relative flex-1 w-full max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search invoices..."
+            placeholder="Search invoice #, CI #, customer..."
             className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
           />
         </div>
 
-        {/* Status tabs */}
         <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+          {TYPE_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setTypeFilter(tab.key)}
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                typeFilter === tab.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1 bg-gray-100 rounded-xl p-1">
           {STATUS_TABS.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setStatusFilter(tab.key)}
               className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                statusFilter === tab.key
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                statusFilter === tab.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
               {tab.label}
@@ -176,109 +283,76 @@ export default function Invoices({ initialInvoiceId = null }: { initialInvoiceId
         </div>
       </div>
 
-      {/* Table */}
+      {selectedList.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-xl bg-blue-50 border border-blue-100">
+          <div className="text-sm text-blue-900">
+            <span className="font-semibold">{selectedList.length}</span> selected
+            {selectionCompanies.size > 1 && (
+              <span className="ml-3 text-amber-700">Select invoices from a single customer to consolidate</span>
+            )}
+            {selectedList.length === 1 && <span className="ml-3 text-blue-700">Select at least 2 to consolidate</span>}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelection(new Map())}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 rounded-lg"
+            >
+              <X className="h-4 w-4" /> Clear
+            </button>
+            <button
+              disabled={!canConsolidate}
+              onClick={() => setNewCi({ companyId: selectedList[0].company_id, ids: selectedList.map((i) => i.id) })}
+              className="flex items-center gap-2 px-4 py-1.5 text-sm font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <Layers className="h-4 w-4" /> Consolidate selected
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        {loading ? (
+        {isLoading ? (
           <div className="py-20 text-center">
             <div className="w-7 h-7 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
             <p className="text-sm text-gray-400">Loading invoices...</p>
           </div>
-        ) : invoices.length === 0 ? (
+        ) : rows.length === 0 ? (
           <div className="py-20 text-center">
             <FileText className="h-10 w-10 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500 font-medium">No invoices found</p>
             <p className="text-sm text-gray-400 mt-1">
-              {searchTerm || statusFilter
+              {searchTerm || statusFilter || typeFilter !== 'all'
                 ? 'Try adjusting your search or filters'
                 : 'Create your first invoice to get started'}
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50/80 border-b border-gray-100">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Invoice #</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Customer</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Due Date</th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Paid</th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Balance</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {invoices.map((inv) => {
-                  const companyName = (inv.companies as { name: string } | null)?.name || 'Unknown';
-                  const balance = Number(inv.balance_due) || 0;
-                  const isOverdue =
-                    inv.status !== 'paid' &&
-                    inv.status !== 'void' &&
-                    inv.due_date &&
-                    new Date(inv.due_date) < new Date() &&
-                    balance > 0;
-
-                  return (
-                    <tr
-                      key={inv.id}
-                      onClick={() => handleViewInvoice(inv.id)}
-                      className={`hover:bg-blue-50/40 cursor-pointer transition-colors ${
-                        isOverdue ? 'bg-red-50/30' : ''
-                      }`}
-                    >
-                      <td className="px-6 py-4">
-                        <span className="font-mono text-sm font-semibold text-blue-700">{inv.invoice_number}</span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 font-medium">{companyName}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{formatDate(inv.invoice_date)}</td>
-                      <td className={`px-6 py-4 text-sm ${isOverdue ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>
-                        {formatDate(inv.due_date)}
-                      </td>
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-900 text-right">
-                        {formatCurrency(Number(inv.total))}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-emerald-600 font-medium text-right">
-                        {formatCurrency(Number(inv.amount_paid))}
-                      </td>
-                      <td className="px-6 py-4 text-sm font-bold text-gray-900 text-right">
-                        {formatCurrency(balance)}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex px-2.5 py-0.5 text-xs font-semibold rounded-full ${
-                            STATUS_COLORS[inv.status] || 'bg-gray-100 text-gray-600'
-                          }`}
-                        >
-                          {STATUS_LABELS[inv.status] || inv.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleViewInvoice(inv.id);
-                          }}
-                          className="text-blue-600 hover:text-blue-700 text-sm font-semibold hover:underline"
-                        >
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <InvoiceListTable
+            rows={rows}
+            ciNumbers={ciNumbers}
+            expanded={effectiveExpanded}
+            selected={new Set(selection.keys())}
+            onToggleExpand={toggleExpand}
+            onToggleSelect={toggleSelect}
+            onOpenInvoice={openInvoice}
+            onOpenConsolidated={setSelectedCiId}
+          />
         )}
       </div>
 
-      {/* New Invoice Slide-Over */}
       <NewInvoiceSlideOver
         open={showNewInvoice}
         onClose={() => setShowNewInvoice(false)}
         onCreated={handleInvoiceCreated}
+      />
+
+      <NewConsolidatedModal
+        open={!!newCi}
+        onClose={() => setNewCi(null)}
+        onCreated={handleCiCreated}
+        initialCompanyId={newCi?.companyId ?? null}
+        initialInvoiceIds={newCi?.ids ?? []}
+        lockCompany={!!newCi?.companyId}
       />
     </div>
   );

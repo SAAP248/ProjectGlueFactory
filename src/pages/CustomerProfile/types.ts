@@ -200,6 +200,7 @@ export interface Invoice {
   balance_due: number;
   notes: string;
   terms: string;
+  consolidated_invoice_id?: string | null;
 }
 
 export interface Estimate {

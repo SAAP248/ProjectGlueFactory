@@ -28,6 +28,7 @@ export interface Invoice {
   payment_token: string | null;
   created_at: string;
   updated_at: string;
+  consolidated_invoice_id?: string | null;
   companies?: { name: string } | null;
 }
 

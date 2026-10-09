@@ -3,6 +3,7 @@ import { Plus, FileText, Receipt, CreditCard, Gift, AlertCircle } from 'lucide-r
 import type { Estimate, Invoice, Transaction, Credit } from './types';
 import { isInvoicePastDue } from './pastDue';
 import EstimatePanel from '../Estimates/EstimatePanel';
+import ConsolidatedInvoicesSection from './ConsolidatedInvoicesSection';
 
 interface Props {
   companyId: string;
@@ -212,6 +213,7 @@ export default function AccountingTab({
 
         {sub === 'invoices' && (
           <>
+            {!overdueOnly && <ConsolidatedInvoicesSection companyId={companyId} onOpenInvoice={onOpenInvoice} />}
             {visibleInvoices.length === 0 ? (
               <div className="py-16 text-center">
                 <Receipt className="h-10 w-10 text-gray-300 mx-auto mb-3" />
@@ -232,8 +234,13 @@ export default function AccountingTab({
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {visibleInvoices.map(inv => (
-                    <tr key={inv.id} className={`hover:bg-gray-50 cursor-pointer transition-colors ${overdueIds.has(inv.id) ? 'bg-red-50/30' : ''}`}>
-                      <td className="px-6 py-4 font-mono text-sm font-medium text-blue-700">{inv.invoice_number}</td>
+                    <tr key={inv.id} onClick={() => onOpenInvoice?.(inv.id)} className={`hover:bg-gray-50 cursor-pointer transition-colors ${overdueIds.has(inv.id) ? 'bg-red-50/30' : ''}`}>
+                      <td className="px-6 py-4 font-mono text-sm font-medium text-blue-700">
+                        {inv.invoice_number}
+                        {inv.consolidated_invoice_id && (
+                          <span className="ml-2 font-sans text-[11px] font-semibold px-1.5 py-0.5 rounded bg-teal-50 text-teal-700">Consolidated</span>
+                        )}
+                      </td>
                       <td className="px-6 py-4 text-sm text-gray-700">
                         {new Date(inv.invoice_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </td>
