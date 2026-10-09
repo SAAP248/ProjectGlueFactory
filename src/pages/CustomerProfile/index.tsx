@@ -7,6 +7,7 @@ import type {
   Invoice, Estimate, Transaction, Credit, WorkOrder, CustomerNote, CallLog, CustomerEmail, SmsMessage
 } from './types';
 import EditCustomerModal from './EditCustomerModal';
+import PasscodeBadge from './PasscodeBadge';
 import OverviewTab from './OverviewTab';
 import SitesSystemsTab from './SitesSystemsTab';
 import AccountingTab from './AccountingTab';
@@ -337,6 +338,12 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
                       </span>
                     );
                   })()}
+                  <PasscodeBadge
+                    key={company.id}
+                    companyId={company.id}
+                    passcode={company.verbal_passcode ?? null}
+                    onSaved={value => setCompany(prev => (prev ? { ...prev, verbal_passcode: value } : prev))}
+                  />
                 </div>
                 <div className="flex items-center gap-4 mt-2 flex-wrap text-sm text-gray-500">
                   {(() => {

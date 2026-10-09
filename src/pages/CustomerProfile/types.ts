@@ -15,6 +15,7 @@ export interface Company {
   customer_type: string;
   account_number: string;
   quickbooks_id: string;
+  verbal_passcode: string | null;
   phone: string;
   email: string;
   phones: PhoneEntry[];

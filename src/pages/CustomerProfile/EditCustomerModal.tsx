@@ -35,6 +35,7 @@ export default function EditCustomerModal({ company, onClose, onSaved }: Props) 
 
   const [accountNumber, setAccountNumber] = useState(company.account_number || '');
   const [quickbooksId, setQuickbooksId] = useState(company.quickbooks_id || '');
+  const [passcode, setPasscode] = useState(company.verbal_passcode || '');
   const [qbSyncStatus, setQbSyncStatus] = useState<QbSyncStatus>(
     (company.qb_sync_status as QbSyncStatus) || 'not_synced'
   );
@@ -151,6 +152,7 @@ export default function EditCustomerModal({ company, onClose, onSaved }: Props) 
       website: website.trim(),
       account_number: accountNumber.trim(),
       quickbooks_id: quickbooksId.trim(),
+      verbal_passcode: passcode.trim() || null,
       qb_sync_status: quickbooksId.trim() ? qbSyncStatus : 'not_synced',
       qb_last_synced_at:
         quickbooksId.trim() && qbSyncStatus === 'synced'
@@ -222,6 +224,18 @@ export default function EditCustomerModal({ company, onClose, onSaved }: Props) 
                   placeholder="e.g. QBO-123456"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Verbal Passcode</label>
+                <input
+                  type="text"
+                  value={passcode}
+                  onChange={e => setPasscode(e.target.value)}
+                  placeholder="e.g. Oranges"
+                  maxLength={60}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <p className="mt-1 text-xs text-gray-500">The word the customer gives on calls to confirm who they are.</p>
               </div>
             </div>
 
