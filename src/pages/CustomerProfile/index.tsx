@@ -8,6 +8,8 @@ import type {
 } from './types';
 import EditCustomerModal from './EditCustomerModal';
 import PasscodeBadge from './PasscodeBadge';
+import { PastDueBadge, PastDueBanner } from './PastDueStatus';
+import { getPastDueSummary } from './pastDue';
 import OverviewTab from './OverviewTab';
 import SitesSystemsTab from './SitesSystemsTab';
 import AccountingTab from './AccountingTab';
@@ -75,6 +77,8 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
   const [savingTrouble, setSavingTrouble] = useState(false);
   const [parent, setParent] = useState<ParentSummary | null>(null);
   const [subCustomers, setSubCustomers] = useState<SubCustomerSummary[]>([]);
+  const [pastDueBannerDismissedFor, setPastDueBannerDismissedFor] = useState<string | null>(null);
+  const [accountingView, setAccountingView] = useState({ overdueOnly: false, key: 0 });
 
   const TABS = [
     { id: 'overview', label: 'Overview' },
@@ -188,6 +192,20 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
   }
 
   const isCommercial = company.customer_type === 'commercial';
+  const pastDue = getPastDueSummary(invoices);
+  const showPastDueBanner = pastDue.count > 0 && pastDue.oldestDays > 30 && pastDueBannerDismissedFor !== company.id;
+
+  function openOverdueInvoices() {
+    setAccountingView(v => ({ overdueOnly: true, key: v.key + 1 }));
+    setActiveTab('accounting');
+  }
+
+  function selectTab(tabId: string) {
+    if (tabId === 'accounting' && activeTab !== 'accounting') {
+      setAccountingView(v => ({ overdueOnly: false, key: v.key + 1 }));
+    }
+    setActiveTab(tabId);
+  }
 
   const tabBadge = (tabId: string): number | null => {
     if (tabId === 'work-orders') {
@@ -195,8 +213,7 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
       return open > 0 ? open : null;
     }
     if (tabId === 'accounting') {
-      const overdue = invoices.filter(i => i.status === 'overdue').length;
-      return overdue > 0 ? overdue : null;
+      return pastDue.count > 0 ? pastDue.count : null;
     }
     if (tabId === 'communications') {
       const unreadEmails = emails.filter(e => !e.is_read && e.direction === 'inbound').length;
@@ -344,6 +361,7 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
                     passcode={company.verbal_passcode ?? null}
                     onSaved={value => setCompany(prev => (prev ? { ...prev, verbal_passcode: value } : prev))}
                   />
+                  <PastDueBadge summary={pastDue} onClick={openOverdueInvoices} />
                 </div>
                 <div className="flex items-center gap-4 mt-2 flex-wrap text-sm text-gray-500">
                   {(() => {
@@ -421,6 +439,14 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
               </button>
             </div>
           </div>
+
+          {showPastDueBanner && (
+            <PastDueBanner
+              summary={pastDue}
+              onView={openOverdueInvoices}
+              onDismiss={() => setPastDueBannerDismissedFor(company.id)}
+            />
+          )}
 
           {(company.critical_notes || editingCriticalNotes) && (
             <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
@@ -539,7 +565,7 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => selectTab(tab.id)}
                   className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                     activeTab === tab.id
                       ? 'border-blue-600 text-blue-600'
@@ -576,7 +602,9 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
             notes={notes}
             systemsCount={systems.length}
             sitesCount={sites.length}
-            onNavigate={setActiveTab}
+            pastDue={pastDue}
+            onNavigate={selectTab}
+            onViewPastDue={openOverdueInvoices}
           />
         )}
         {activeTab === 'deals' && (
@@ -596,6 +624,8 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
         )}
         {activeTab === 'accounting' && (
           <AccountingTab
+            key={accountingView.key}
+            initialOverdueOnly={accountingView.overdueOnly}
             companyId={company.id}
             companyName={company.name}
             onChanged={() => refreshAccounting(company.id)}

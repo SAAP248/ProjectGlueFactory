@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Plus, FileText, Receipt, CreditCard, Gift } from 'lucide-react';
+import { Plus, FileText, Receipt, CreditCard, Gift, AlertCircle } from 'lucide-react';
 import type { Estimate, Invoice, Transaction, Credit } from './types';
+import { isInvoicePastDue } from './pastDue';
 import EstimatePanel from '../Estimates/EstimatePanel';
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
   credits: Credit[];
   onChanged: () => void;
   onOpenInvoice?: (invoiceId: string) => void;
+  initialOverdueOnly?: boolean;
 }
 
 const estimateStatusStyles: Record<string, string> = {
@@ -53,15 +55,19 @@ const SUB_TABS = [
 ];
 
 export default function AccountingTab({
-  companyId, companyName, estimates, invoices, transactions, credits, onChanged, onOpenInvoice,
+  companyId, companyName, estimates, invoices, transactions, credits, onChanged, onOpenInvoice, initialOverdueOnly = false,
 }: Props) {
-  const [sub, setSub] = useState('estimates');
+  const [sub, setSub] = useState(initialOverdueOnly ? 'invoices' : 'estimates');
+  const [overdueOnly, setOverdueOnly] = useState(initialOverdueOnly);
   const [selectedEstimateId, setSelectedEstimateId] = useState<string | null>(null);
   const [creatingEstimate, setCreatingEstimate] = useState(false);
 
   const totalPaid = transactions.reduce((sum, t) => sum + Number(t.amount), 0);
   const availableCredits = credits.filter(c => c.status === 'unapplied').reduce((sum, c) => sum + Number(c.amount), 0);
-  const overdueCount = invoices.filter(i => i.status === 'overdue').length;
+  const overdueInvoices = invoices.filter(i => isInvoicePastDue(i));
+  const overdueIds = new Set(overdueInvoices.map(i => i.id));
+  const overdueCount = overdueInvoices.length;
+  const visibleInvoices = overdueOnly ? overdueInvoices : invoices;
   const totalBilled = invoices.reduce((sum, i) => sum + Number(i.total), 0);
   const totalBalance = invoices.reduce((sum, i) => sum + Number(i.balance_due), 0);
 
@@ -122,10 +128,24 @@ export default function AccountingTab({
               </button>
             )}
             {sub === 'invoices' && (
-              <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
-                <Plus className="h-4 w-4" />
-                New Invoice
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setOverdueOnly(v => !v)}
+                  disabled={overdueCount === 0 && !overdueOnly}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                    overdueOnly
+                      ? 'bg-red-600 border-red-600 text-white hover:bg-red-700'
+                      : 'bg-white border-gray-200 text-gray-600 hover:border-red-200 hover:text-red-700'
+                  }`}
+                >
+                  <AlertCircle className="h-4 w-4" />
+                  Overdue only
+                </button>
+                <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+                  <Plus className="h-4 w-4" />
+                  New Invoice
+                </button>
+              </div>
             )}
             {sub === 'payments' && (
               <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
@@ -192,10 +212,10 @@ export default function AccountingTab({
 
         {sub === 'invoices' && (
           <>
-            {invoices.length === 0 ? (
+            {visibleInvoices.length === 0 ? (
               <div className="py-16 text-center">
                 <Receipt className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">No invoices for this customer</p>
+                <p className="text-gray-500">{overdueOnly ? 'No overdue invoices' : 'No invoices for this customer'}</p>
               </div>
             ) : (
               <table className="w-full">
@@ -211,13 +231,13 @@ export default function AccountingTab({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {invoices.map(inv => (
-                    <tr key={inv.id} className={`hover:bg-gray-50 cursor-pointer transition-colors ${inv.status === 'overdue' ? 'bg-red-50/30' : ''}`}>
+                  {visibleInvoices.map(inv => (
+                    <tr key={inv.id} className={`hover:bg-gray-50 cursor-pointer transition-colors ${overdueIds.has(inv.id) ? 'bg-red-50/30' : ''}`}>
                       <td className="px-6 py-4 font-mono text-sm font-medium text-blue-700">{inv.invoice_number}</td>
                       <td className="px-6 py-4 text-sm text-gray-700">
                         {new Date(inv.invoice_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </td>
-                      <td className={`px-6 py-4 text-sm ${inv.status === 'overdue' ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                      <td className={`px-6 py-4 text-sm ${overdueIds.has(inv.id) ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
                         {inv.due_date ? new Date(inv.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                       </td>
                       <td className="px-6 py-4 text-sm font-semibold text-gray-900">

@@ -1,5 +1,6 @@
 import { DollarSign, AlertCircle, TrendingUp, CreditCard, Shield, MapPin, Wrench, Clock } from 'lucide-react';
 import type { Company, WorkOrder, Invoice, CustomerNote } from './types';
+import { formatMoney, type PastDueSummary } from './pastDue';
 
 interface Props {
   company: Company;
@@ -8,10 +9,12 @@ interface Props {
   notes: CustomerNote[];
   systemsCount: number;
   sitesCount: number;
+  pastDue: PastDueSummary;
   onNavigate: (tab: string) => void;
+  onViewPastDue: () => void;
 }
 
-export default function OverviewTab({ company, workOrders, invoices, notes, systemsCount, sitesCount, onNavigate }: Props) {
+export default function OverviewTab({ company, workOrders, invoices, notes, systemsCount, sitesCount, pastDue, onNavigate, onViewPastDue }: Props) {
   const openWOs = workOrders.filter(w => !['completed', 'cancelled'].includes(w.status)).length;
   const lastService = workOrders
     .filter(w => w.status === 'completed' && w.scheduled_date)
@@ -34,10 +37,12 @@ export default function OverviewTab({ company, workOrders, invoices, notes, syst
     },
     {
       label: 'Past Due',
-      value: `$${Number(company.past_due_amount).toLocaleString()}`,
+      value: formatMoney(pastDue.total),
+      sub: pastDue.count > 0 ? `${pastDue.count} invoice${pastDue.count === 1 ? '' : 's'} · oldest ${pastDue.oldestDays}d` : 'All current',
+      onClick: onViewPastDue,
       icon: AlertCircle,
-      color: Number(company.past_due_amount) > 0 ? 'text-red-600' : 'text-gray-400',
-      bg: Number(company.past_due_amount) > 0 ? 'bg-red-50' : 'bg-gray-50',
+      color: pastDue.total > 0 ? 'text-red-600' : 'text-gray-400',
+      bg: pastDue.total > 0 ? 'bg-red-50' : 'bg-gray-50',
     },
     {
       label: 'Payment Terms',
@@ -101,8 +106,8 @@ export default function OverviewTab({ company, workOrders, invoices, notes, syst
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {financialCards.map((card, i) => {
           const Icon = card.icon;
-          return (
-            <div key={i} className="bg-white rounded-xl border border-gray-100 p-5">
+          const content = (
+            <>
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-medium text-gray-500">{card.label}</span>
                 <div className={`${card.bg} p-2 rounded-lg`}>
@@ -110,6 +115,20 @@ export default function OverviewTab({ company, workOrders, invoices, notes, syst
                 </div>
               </div>
               <p className={`text-xl font-bold ${card.color}`}>{card.value}</p>
+              {card.sub && <p className="text-xs text-gray-500 mt-1">{card.sub}</p>}
+            </>
+          );
+          return card.onClick ? (
+            <button
+              key={i}
+              onClick={card.onClick}
+              className="text-left bg-white rounded-xl border border-gray-100 p-5 hover:border-red-200 hover:shadow-sm transition-all"
+            >
+              {content}
+            </button>
+          ) : (
+            <div key={i} className="bg-white rounded-xl border border-gray-100 p-5">
+              {content}
             </div>
           );
         })}
