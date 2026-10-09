@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Star, Phone, Mail, MapPin, Globe, CreditCard as Edit, Wrench, FileText, Plus, Building2, Home, AlertTriangle, Pencil, Check, X, ShieldAlert, Network, ChevronRight, CheckCircle2, CircleDashed, XCircle, MinusCircle } from 'lucide-react';
+import { ArrowLeft, Star, Phone, Mail, MapPin, Globe, CreditCard as Edit, Wrench, FileText, Building2, Home, ShieldAlert, Network, ChevronRight, CheckCircle2, CircleDashed, XCircle, MinusCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { QB_SYNC_LABELS, QB_SYNC_STYLES, formatLastSynced, type QbSyncStatus } from '../../lib/quickbooks';
 import type {
@@ -8,7 +8,9 @@ import type {
 } from './types';
 import EditCustomerModal from './EditCustomerModal';
 import PasscodeBadge from './PasscodeBadge';
-import { PastDueBadge, PastDueBanner } from './PastDueStatus';
+import { PastDueBadge } from './PastDueStatus';
+import CustomerAlerts from './CustomerAlerts';
+import MoreActionsMenu from './MoreActionsMenu';
 import { getPastDueSummary } from './pastDue';
 import OverviewTab from './OverviewTab';
 import SitesSystemsTab from './SitesSystemsTab';
@@ -69,11 +71,7 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
   const [callLogs, setCallLogs] = useState<CallLog[]>([]);
   const [emails, setEmails] = useState<CustomerEmail[]>([]);
   const [smsMessages, setSmsMessages] = useState<SmsMessage[]>([]);
-  const [editingCriticalNotes, setEditingCriticalNotes] = useState(false);
-  const [criticalNotesText, setCriticalNotesText] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editingTroubleNotes, setEditingTroubleNotes] = useState(false);
-  const [troubleNotesText, setTroubleNotesText] = useState('');
   const [savingTrouble, setSavingTrouble] = useState(false);
   const [parent, setParent] = useState<ParentSummary | null>(null);
   const [subCustomers, setSubCustomers] = useState<SubCustomerSummary[]>([]);
@@ -122,8 +120,6 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
 
     if (companyRes.data) {
       setCompany(companyRes.data);
-      setCriticalNotesText(companyRes.data.critical_notes || '');
-      setTroubleNotesText((companyRes.data as any).trouble_notes || '');
 
       const [parentRes, subsRes] = await Promise.all([
         companyRes.data.parent_company_id
@@ -193,7 +189,7 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
 
   const isCommercial = company.customer_type === 'commercial';
   const pastDue = getPastDueSummary(invoices);
-  const showPastDueBanner = pastDue.count > 0 && pastDue.oldestDays > 30 && pastDueBannerDismissedFor !== company.id;
+  const showPastDueAlert = pastDue.count > 0 && pastDue.oldestDays > 30 && pastDueBannerDismissedFor !== company.id;
 
   function openOverdueInvoices() {
     setAccountingView(v => ({ overdueOnly: true, key: v.key + 1 }));
@@ -224,33 +220,18 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
     return null;
   };
 
-  async function saveCriticalNotes() {
-    if (!company) return;
-    await supabase.from('companies').update({ critical_notes: criticalNotesText }).eq('id', company.id);
-    setCompany(c => c ? { ...c, critical_notes: criticalNotesText } : c);
-    setEditingCriticalNotes(false);
-  }
-
   async function toggleTroubleCustomer() {
     if (!company) return;
     setSavingTrouble(true);
-    const newVal = !(company as any).is_trouble_customer;
-    const update: Record<string, any> = {
+    const newVal = !company.is_trouble_customer;
+    const update: Partial<Company> = {
       is_trouble_customer: newVal,
       trouble_flagged_at: newVal ? new Date().toISOString() : null,
     };
     if (!newVal) update.trouble_notes = null;
-    await supabase.from('companies').update(update).eq('id', company.id);
-    setCompany(c => c ? { ...c, ...update } : c);
-    if (!newVal) setTroubleNotesText('');
+    const { error } = await supabase.from('companies').update(update).eq('id', company.id);
+    if (!error) setCompany(c => c ? { ...c, ...update } : c);
     setSavingTrouble(false);
-  }
-
-  async function saveTroubleNotes() {
-    if (!company) return;
-    await supabase.from('companies').update({ trouble_notes: troubleNotesText }).eq('id', company.id);
-    setCompany(c => c ? { ...c, trouble_notes: troubleNotesText } as any : c);
-    setEditingTroubleNotes(false);
   }
 
   return (
@@ -283,8 +264,8 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
             )}
           </div>
 
-          <div className="flex items-start justify-between gap-4 mb-5">
-            <div className="flex items-start gap-4">
+          <div className="flex flex-col md:flex-row md:items-start gap-4 md:gap-6 mb-5">
+            <div className="flex items-start gap-4 flex-1 min-w-0">
               <div className={`w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 ${
                 isCommercial ? 'bg-blue-100' : 'bg-green-100'
               }`}>
@@ -293,7 +274,7 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
                   : <Home className="h-7 w-7 text-green-600" />
                 }
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-3 flex-wrap">
                   <h1 className="text-2xl font-bold text-gray-900">{company.name}</h1>
                   {subCustomers.length > 0 && (
@@ -318,7 +299,7 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
                       VIP
                     </div>
                   )}
-                  {(company as any).is_trouble_customer && (
+                  {company.is_trouble_customer && (
                     <div className="flex items-center gap-1 px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
                       <ShieldAlert className="h-3.5 w-3.5" />
                       Trouble Customer
@@ -335,7 +316,7 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
                     {company.customer_type}
                   </span>
                 </div>
-                <div className="flex items-center gap-3 mt-1 flex-wrap">
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   {company.account_number && (
                     <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
                       WH: {company.account_number}
@@ -417,147 +398,40 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button
-                onClick={() => setShowEditModal(true)}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <Edit className="h-4 w-4" />
-                Edit
-              </button>
-              <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
-                <Wrench className="h-4 w-4" />
-                New WO
-              </button>
-              <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors">
-                <FileText className="h-4 w-4" />
-                Invoice
-              </button>
-              <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                <Plus className="h-4 w-4" />
-                More
-              </button>
+            <div className="flex flex-col gap-3 w-full md:w-96 flex-shrink-0">
+              <div className="flex items-center gap-2 md:justify-end flex-wrap">
+                <button
+                  onClick={() => setShowEditModal(true)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <Edit className="h-4 w-4" />
+                  Edit
+                </button>
+                <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
+                  <Wrench className="h-4 w-4" />
+                  New WO
+                </button>
+                <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors">
+                  <FileText className="h-4 w-4" />
+                  Invoice
+                </button>
+                <MoreActionsMenu
+                  isTroubleCustomer={!!company.is_trouble_customer}
+                  busy={savingTrouble}
+                  onToggleTrouble={toggleTroubleCustomer}
+                />
+              </div>
+              <CustomerAlerts
+                company={company}
+                pastDue={pastDue}
+                showPastDue={showPastDueAlert}
+                onViewPastDue={openOverdueInvoices}
+                onDismissPastDue={() => setPastDueBannerDismissedFor(company.id)}
+                onRemoveTroubleFlag={toggleTroubleCustomer}
+                onCompanyChange={patch => setCompany(c => (c ? { ...c, ...patch } : c))}
+              />
             </div>
           </div>
-
-          {showPastDueBanner && (
-            <PastDueBanner
-              summary={pastDue}
-              onView={openOverdueInvoices}
-              onDismiss={() => setPastDueBannerDismissedFor(company.id)}
-            />
-          )}
-
-          {(company.critical_notes || editingCriticalNotes) && (
-            <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
-              <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Critical Notes</span>
-                {editingCriticalNotes ? (
-                  <div className="mt-1.5 flex items-end gap-2">
-                    <textarea
-                      value={criticalNotesText}
-                      onChange={e => setCriticalNotesText(e.target.value)}
-                      rows={2}
-                      placeholder="Gate code, alarm code, special access instructions..."
-                      className="flex-1 border border-amber-300 bg-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
-                    />
-                    <div className="flex flex-col gap-1 flex-shrink-0">
-                      <button onClick={saveCriticalNotes} className="p-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors">
-                        <Check className="h-4 w-4" />
-                      </button>
-                      <button onClick={() => { setEditingCriticalNotes(false); setCriticalNotesText(company.critical_notes || ''); }} className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-amber-800 font-medium mt-0.5 leading-relaxed">{company.critical_notes}</p>
-                )}
-              </div>
-              {!editingCriticalNotes && (
-                <button onClick={() => setEditingCriticalNotes(true)} className="p-1.5 text-amber-500 hover:text-amber-700 hover:bg-amber-100 rounded-lg transition-colors flex-shrink-0">
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-          )}
-
-          {!company.critical_notes && !editingCriticalNotes && (
-            <div className="mb-4">
-              <button
-                onClick={() => setEditingCriticalNotes(true)}
-                className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-800 transition-colors"
-              >
-                <AlertTriangle className="h-3.5 w-3.5" />
-                Add critical notes (gate codes, access info...)
-              </button>
-            </div>
-          )}
-
-          {(company as any).is_trouble_customer && (
-            <div className="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-start gap-3">
-              <ShieldAlert className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <span className="text-xs font-semibold text-red-700 uppercase tracking-wide">Trouble Customer</span>
-                {editingTroubleNotes ? (
-                  <div className="mt-1.5 flex items-end gap-2">
-                    <textarea
-                      value={troubleNotesText}
-                      onChange={e => setTroubleNotesText(e.target.value)}
-                      rows={2}
-                      placeholder="Describe issues, payment disputes, aggressive behavior..."
-                      className="flex-1 border border-red-300 bg-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
-                    />
-                    <div className="flex flex-col gap-1 flex-shrink-0">
-                      <button onClick={saveTroubleNotes} className="p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
-                        <Check className="h-4 w-4" />
-                      </button>
-                      <button onClick={() => { setEditingTroubleNotes(false); setTroubleNotesText((company as any).trouble_notes || ''); }} className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-red-800 font-medium mt-0.5 leading-relaxed">
-                    {(company as any).trouble_notes || 'No notes added.'}
-                  </p>
-                )}
-                {(company as any).trouble_flagged_at && (
-                  <p className="text-xs text-red-500 mt-1">
-                    Flagged {new Date((company as any).trouble_flagged_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {!editingTroubleNotes && (
-                  <button onClick={() => setEditingTroubleNotes(true)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-100 rounded-lg transition-colors">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                <button
-                  onClick={toggleTroubleCustomer}
-                  disabled={savingTrouble}
-                  className="text-xs px-2 py-1 bg-white border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors font-medium"
-                >
-                  Remove Flag
-                </button>
-              </div>
-            </div>
-          )}
-
-          {!(company as any).is_trouble_customer && (
-            <div className="mb-4">
-              <button
-                onClick={toggleTroubleCustomer}
-                disabled={savingTrouble}
-                className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 transition-colors"
-              >
-                <ShieldAlert className="h-3.5 w-3.5" />
-                Flag as trouble customer
-              </button>
-            </div>
-          )}
 
           <div className="flex gap-0 border-b-0 -mb-px overflow-x-auto">
             {TABS.map(tab => {

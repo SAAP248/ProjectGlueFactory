@@ -35,6 +35,9 @@ export interface Company {
   payment_terms: string;
   notes: string;
   critical_notes: string;
+  is_trouble_customer?: boolean;
+  trouble_notes?: string | null;
+  trouble_flagged_at?: string | null;
   parent_company_id: string | null;
   bill_with_parent: boolean;
   is_sub_customer: boolean;
