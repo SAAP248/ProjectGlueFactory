@@ -10,8 +10,10 @@ export interface Deal {
   value: number;
   probability: number;
   sales_stage: string;
-  install_status: string;
-  office_status: string;
+  install_status: string | null;
+  office_status: string | null;
+  install_status_entered_at?: string | null;
+  office_status_entered_at?: string | null;
   expected_close_date: string | null;
   close_date: string | null;
   lost_reason: string | null;
@@ -27,8 +29,18 @@ export interface Deal {
   created_at: string;
   assigned_employee_id: string | null;
   proposal_token?: string;
-  companies?: { name: string } | null;
+  companies?: { name: string; phone: string | null; email: string | null } | null;
+  sites?: DealSite | null;
   assigned_employee?: { first_name: string; last_name: string } | null;
+}
+
+export interface DealSite {
+  id: string;
+  name: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
 }
 
 export interface DealActivity {
@@ -38,7 +50,19 @@ export interface DealActivity {
   description: string;
   old_value: string | null;
   new_value: string | null;
+  status_field?: StatusField | null;
+  is_automatic?: boolean;
   created_at: string;
+}
+
+export type StatusField = 'sales_stage' | 'install_status' | 'office_status';
+
+export interface StatusGroup {
+  field: StatusField;
+  label: string;
+  options: readonly string[];
+  mainPath: readonly string[];
+  needsReason: readonly string[];
 }
 
 export interface DealTask {
@@ -98,6 +122,46 @@ export const OFFICE_STATUSES = [
   'Customer Cancelled',
 ] as const;
 
+export const OFF_PATH_STATUSES = [
+  'Sold & Failed', 'Did not sell', 'Purchased From Another', 'Lost', 'On hold', 'Customer Cancelled',
+] as const;
+
+export const STATUS_GROUPS: StatusGroup[] = [
+  {
+    field: 'sales_stage',
+    label: 'Sales',
+    options: SALES_STAGES,
+    mainPath: SALES_STAGES.slice(0, 6),
+    needsReason: ['Lost', 'Did not sell', 'Purchased From Another'],
+  },
+  {
+    field: 'install_status',
+    label: 'Install',
+    options: INSTALL_STATUSES,
+    mainPath: INSTALL_STATUSES.filter(s => s !== 'On hold'),
+    needsReason: [],
+  },
+  {
+    field: 'office_status',
+    label: 'Office',
+    options: OFFICE_STATUSES,
+    mainPath: OFFICE_STATUSES.filter(s => s !== 'Customer Cancelled'),
+    needsReason: ['Customer Cancelled'],
+  },
+];
+
+export function getStatusGroup(field: StatusField): StatusGroup {
+  return STATUS_GROUPS.find(g => g.field === field) ?? STATUS_GROUPS[0];
+}
+
+export function isOffPath(status: string | null): boolean {
+  return !!status && (OFF_PATH_STATUSES as readonly string[]).includes(status);
+}
+
+export function isDealSold(deal: Pick<Deal, 'install_status' | 'office_status'>): boolean {
+  return deal.install_status != null || deal.office_status != null;
+}
+
 export const FORECAST_CATEGORIES: { value: ForecastCategory; label: string; color: string }[] = [
   { value: 'commit', label: 'Commit', color: 'text-green-700 bg-green-100 border-green-200' },
   { value: 'best_case', label: 'Best Case', color: 'text-blue-700 bg-blue-100 border-blue-200' },
@@ -118,7 +182,10 @@ export function getStageColor(stage: string): string {
   if (['In Progress', 'Agreement Sent', 'Contract Signed'].includes(stage)) {
     return 'bg-blue-100 text-blue-800 border-blue-200';
   }
-  if (['On hold', 'Waiting on Customer'].includes(stage)) {
+  if (stage === 'On hold') {
+    return 'bg-amber-100 text-amber-900 border-amber-300';
+  }
+  if (stage === 'Waiting on Customer') {
     return 'bg-orange-100 text-orange-800 border-orange-200';
   }
   return 'bg-yellow-100 text-yellow-800 border-yellow-200';

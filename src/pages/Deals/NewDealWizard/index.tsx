@@ -331,8 +331,6 @@ export default function NewDealWizard({ initialStage, prefilledCompanyId, prefil
         value: totalRevenue,
         probability: isSending ? 50 : 20,
         sales_stage: isSending ? 'Proposal Sent' : (initialStage ?? 'Lead'),
-        install_status: 'Not Scheduled',
-        office_status: 'Sold',
         forecast_category: 'pipeline',
         stage_entered_at: new Date().toISOString(),
         proposal_token: proposalToken,

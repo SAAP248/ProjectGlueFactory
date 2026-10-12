@@ -16,14 +16,21 @@ import {
   formatCurrency, getStageColor,
 } from './types';
 
-export default function Deals() {
+interface DealsProps {
+  onViewCustomer?: (companyId: string) => void;
+  onOpenInvoice?: (invoiceId: string) => void;
+}
+
+export default function Deals({ onViewCustomer, onOpenInvoice }: DealsProps) {
   const { deals, employees, loading, updateDealStage, updateDeal, refetch } = useDeals();
 
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [pipelineFilter, setPipelineFilter] = useState<PipelineFilter>('sales');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'value' | 'date' | 'company'>('value');
-  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
+  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+  const selectedDeal = useMemo(() => deals.find(d => d.id === selectedDealId) ?? null, [deals, selectedDealId]);
+  const setSelectedDeal = (deal: Deal | null) => setSelectedDealId(deal?.id ?? null);
   const [showNewDeal, setShowNewDeal] = useState(false);
   const [quickAddStage, setQuickAddStage] = useState<string | undefined>();
   const [quickStartMode, setQuickStartMode] = useState(false);
@@ -104,7 +111,7 @@ export default function Deals() {
   const getStageValue = (deal: Deal): string => {
     switch (pipelineFilter) {
       case 'sales': return deal.sales_stage;
-      case 'install': return deal.install_status;
+      case 'install': return deal.install_status ?? '';
       case 'office': return deal.office_status ?? '';
     }
   };
@@ -146,10 +153,7 @@ export default function Deals() {
     const field: 'sales_stage' | 'install_status' | 'office_status' =
       pipelineFilter === 'sales' ? 'sales_stage' :
       pipelineFilter === 'install' ? 'install_status' : 'office_status';
-    updateDealStage(dealId, field, newStage, oldStage);
-    if (selectedDeal?.id === dealId) {
-      setSelectedDeal(prev => prev ? { ...prev, [field]: newStage } : null);
-    }
+    updateDealStage(dealId, field, newStage, oldStage || null);
   };
 
   const viewTabs: { mode: ViewMode; label: string; icon: React.ReactNode }[] = [
@@ -413,14 +417,18 @@ export default function Deals() {
                         </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStageColor(deal.install_status)}`}>
-                          {deal.install_status}
-                        </span>
+                        {deal.install_status ? (
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStageColor(deal.install_status)}`}>
+                            {deal.install_status}
+                          </span>
+                        ) : <span className="text-xs text-gray-300">—</span>}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStageColor(deal.office_status ?? '')}`}>
-                          {deal.office_status ?? '—'}
-                        </span>
+                        {deal.office_status ? (
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStageColor(deal.office_status)}`}>
+                            {deal.office_status}
+                          </span>
+                        ) : <span className="text-xs text-gray-300">—</span>}
                       </td>
                       <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
                         {deal.expected_close_date
@@ -460,6 +468,10 @@ export default function Deals() {
         employees={employees}
         onClose={() => setSelectedDeal(null)}
         onUpdate={updateDeal}
+        onStatusChange={updateDealStage}
+        onDealsChanged={refetch}
+        onViewCustomer={onViewCustomer}
+        onOpenInvoice={onOpenInvoice}
       />
 
       {showNewDeal && (

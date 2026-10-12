@@ -50,8 +50,6 @@ export default function NewDealModal({ initialStage = 'Lead', onClose, onCreate 
       value: Number(form.value) || 0,
       probability: Number(form.probability) || 0,
       sales_stage: form.sales_stage,
-      install_status: 'Not Scheduled',
-      office_status: 'Sold',
       forecast_category: form.forecast_category,
       expected_close_date: form.expected_close_date || null,
       description: form.description || null,

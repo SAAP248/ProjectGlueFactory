@@ -62,7 +62,7 @@ export default function DealCard({ deal, onClick, onDragStart, showInstall = tru
         />
       </div>
 
-      {showInstall && (
+      {showInstall && deal.install_status && (
         <div className="mb-3 space-y-1.5">
           <div className="flex items-center justify-between text-xs">
             <span className="text-gray-500">Install:</span>

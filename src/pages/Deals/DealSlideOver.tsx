@@ -1,16 +1,19 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   X, MessageSquare, CheckSquare, Plus, Clock, CreditCard as Edit3, Save,
   AlertCircle, Send, FileText, User, Trash2, GripVertical, ShoppingBag, Search,
   Wrench, FolderKanban, Calendar, ChevronDown, ChevronUp, Timer, Navigation, BookOpen, Eye,
 } from 'lucide-react';
-import type { Deal, Employee } from './types';
+import type { Deal, Employee, StatusField } from './types';
 import { useDealActivities } from './useDeals';
 import { supabase } from '../../lib/supabase';
 import {
-  SALES_STAGES, INSTALL_STATUSES, OFFICE_STATUSES, FORECAST_CATEGORIES,
-  getStageColor, getDaysInStage, getAgingColor, formatCurrency, getWorkOrderStatusColor,
+  FORECAST_CATEGORIES, formatCurrency, getWorkOrderStatusColor, getStatusGroup,
 } from './types';
+import DealCustomerHeader from './DealCustomerHeader';
+import DealStatusCards from './DealStatusCards';
+import DealStory from './DealStory';
+import type { NextStep, StoryLink } from './useDealStory';
 import WorkOrderModal from '../WorkOrders/WorkOrderModal';
 import SendToCustomerModal from '../Estimates/SendToCustomerModal';
 import { customerEstimateLink } from '../Estimates/useEstimates';
@@ -55,6 +58,35 @@ interface Props {
   employees: Employee[];
   onClose: () => void;
   onUpdate: (dealId: string, updates: Partial<Deal>) => Promise<boolean>;
+  onStatusChange: (
+    dealId: string,
+    field: StatusField,
+    newValue: string | null,
+    oldValue: string | null,
+    extra?: { reason?: string; updates?: Partial<Deal> },
+  ) => Promise<Deal | null>;
+  onDealsChanged: () => Promise<void> | void;
+  onViewCustomer?: (companyId: string) => void;
+  onOpenInvoice?: (invoiceId: string) => void;
+}
+
+interface UndoToast {
+  message: string;
+  undo?: () => Promise<void>;
+}
+
+function formFromDeal(deal: Deal): Partial<Deal> {
+  return {
+    title: deal.title,
+    value: deal.value,
+    probability: deal.probability,
+    expected_close_date: deal.expected_close_date ?? '',
+    forecast_category: deal.forecast_category,
+    description: deal.description ?? '',
+    scope_of_work: deal.scope_of_work ?? '',
+    internal_notes: deal.internal_notes ?? '',
+    terms_and_conditions: deal.terms_and_conditions ?? '',
+  };
 }
 
 type ActiveTab = 'details' | 'proposal' | 'work_orders' | 'activity' | 'tasks' | 'time';
@@ -164,7 +196,7 @@ function useDealWorkOrders(dealId: string | null) {
   return { workOrders, loading, refetch: fetch };
 }
 
-export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Props) {
+export default function DealSlideOver({ deal, employees, onClose, onUpdate, onStatusChange, onDealsChanged, onViewCustomer, onOpenInvoice }: Props) {
   const [activeTab, setActiveTab] = useState<ActiveTab>('details');
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Partial<Deal>>({});
@@ -172,7 +204,7 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDue, setTaskDue] = useState('');
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<UndoToast | null>(null);
   const [eAgreementModal, setEAgreementModal] = useState(false);
   const [eAgreementEmail, setEAgreementEmail] = useState('');
   const [proposalSaving, setProposalSaving] = useState(false);
@@ -183,7 +215,7 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
   const [catalogCategory, setCatalogCategory] = useState('');
   const { products: catalogProducts, loading: catalogLoading } = useProductCatalog();
 
-  const { activities, tasks, addNote, addTask, toggleTask } = useDealActivities(deal?.id ?? null);
+  const { activities, tasks, addNote, addTask, toggleTask, refreshActivities } = useDealActivities(deal?.id ?? null);
   const { estimateId, meta: proposalMeta, lineItems, setLineItems, notes, setNotes, terms, setTerms, loading: proposalLoading, refetch: refetchProposal } = useProposal(deal?.id ?? null);
   const { workOrders, loading: workOrdersLoading, refetch: refetchWorkOrders } = useDealWorkOrders(deal?.id ?? null);
   const [showCreateWO, setShowCreateWO] = useState(false);
@@ -228,38 +260,99 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
 
   useEffect(() => {
     if (deal) {
-      setForm({
-        title: deal.title,
-        value: deal.value,
-        probability: deal.probability,
-        sales_stage: deal.sales_stage,
-        install_status: deal.install_status,
-        office_status: deal.office_status,
-        expected_close_date: deal.expected_close_date ?? '',
-        forecast_category: deal.forecast_category,
-        description: deal.description ?? '',
-        scope_of_work: deal.scope_of_work ?? '',
-        internal_notes: deal.internal_notes ?? '',
-        terms_and_conditions: deal.terms_and_conditions ?? '',
-        lost_reason: deal.lost_reason ?? '',
-        assigned_employee_id: deal.assigned_employee_id ?? '',
-      });
+      setForm(formFromDeal(deal));
       setEditing(false);
     }
-  }, [deal]);
+  }, [deal?.id]);
 
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>();
+  function showToast(message: string, undo?: () => Promise<void>) {
+    clearTimeout(toastTimer.current);
+    setToast({ message, undo });
+    toastTimer.current = setTimeout(() => setToast(null), undo ? 6000 : 3000);
   }
 
   const [sendOpen, setSendOpen] = useState(false);
 
   if (!deal) return null;
 
-  const days = getDaysInStage(deal.stage_entered_at);
   const overdueTasks = tasks.filter(t => !t.is_done && t.due_date && new Date(t.due_date) < new Date());
-  const assignedEmployee = deal.assigned_employee;
+
+  const startEditing = () => {
+    setForm(formFromDeal(deal));
+    setEditing(true);
+  };
+
+  const handleStatusChange = async (field: StatusField, value: string, reason?: string) => {
+    const before = deal;
+    const oldValue = before[field] as string | null;
+    const needsLostReason = field === 'sales_stage' && !!reason;
+    const fresh = await onStatusChange(deal.id, field, value, oldValue, {
+      reason,
+      updates: needsLostReason ? { lost_reason: reason } : undefined,
+    });
+    if (!fresh) { showToast('Could not update the status. Please try again.'); return; }
+    await refreshActivities();
+    trackAction('status_changed', `${getStatusGroup(field).label}: ${value}`);
+    const label = getStatusGroup(field).label;
+    showToast(`${label} status set to "${value}"`, async () => {
+      const restored = await onStatusChange(deal.id, field, oldValue, value, {
+        updates: needsLostReason ? { lost_reason: before.lost_reason } : undefined,
+      });
+      if (restored && field === 'sales_stage' && before.install_status !== restored.install_status) {
+        await onUpdate(deal.id, { install_status: before.install_status, office_status: before.office_status });
+      }
+      await refreshActivities();
+      showToast(restored ? `${label} status restored to "${oldValue ?? 'empty'}"` : 'Could not undo the change.');
+    });
+  };
+
+  const handleAssign = async (employeeId: string | null) => {
+    const prev = deal.assigned_employee;
+    const next = employees.find(e => e.id === employeeId);
+    const ok = await onUpdate(deal.id, { assigned_employee_id: employeeId });
+    if (!ok) { showToast('Could not change the salesperson.'); return; }
+    const prevName = prev ? `${prev.first_name} ${prev.last_name}` : 'Unassigned';
+    const nextName = next ? `${next.first_name} ${next.last_name}` : 'Unassigned';
+    await supabase.from('deal_activities').insert({
+      deal_id: deal.id,
+      activity_type: 'assignment',
+      description: `Salesperson changed from ${prevName} to ${nextName}`,
+      old_value: prevName,
+      new_value: nextName,
+    });
+    await refreshActivities();
+    showToast(`Assigned to ${nextName}`);
+  };
+
+  const handleChooseSite = async (siteId: string) => {
+    const ok = await onUpdate(deal.id, { site_id: siteId });
+    showToast(ok ? 'Site added to this deal' : 'Could not set the site.');
+  };
+
+  const handleStoryLink = (link: StoryLink) => {
+    if (link.type === 'estimate') setActiveTab('proposal');
+    else if (link.type === 'work_order') setActiveTab('work_orders');
+    else if (onOpenInvoice) onOpenInvoice(link.id);
+  };
+
+  const handleStoryAction = async (action: NonNullable<NextStep['action']>) => {
+    switch (action.kind) {
+      case 'create_estimate': setActiveTab('proposal'); break;
+      case 'send_estimate': openSend(); break;
+      case 'follow_up': {
+        const due = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+        await addTask(deal.id, `Follow up with ${deal.companies?.name ?? 'customer'} about the estimate`, due);
+        showToast('Follow-up task added for tomorrow');
+        break;
+      }
+      case 'mark_sold': await handleStatusChange('sales_stage', 'Sold'); break;
+      case 'create_work_order': setShowCreateWO(true); break;
+      case 'view_work_orders': setActiveTab('work_orders'); break;
+      case 'open_invoice': if (action.invoiceId && onOpenInvoice) onOpenInvoice(action.invoiceId); break;
+      case 'office_reviewed': await handleStatusChange('office_status', 'Office Reviewed'); break;
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -297,10 +390,9 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
   const handleProposalSent = async (mode: 'estimate' | 'proposal') => {
     const ok = await onUpdate(deal.id, {
       proposal_sent_date: new Date().toISOString(),
-      sales_stage: 'Proposal Sent',
     });
     if (ok) await addNote(deal.id, `${mode === 'proposal' ? 'Proposal' : 'Estimate'} sent to customer.`);
-    await refetchProposal();
+    await Promise.all([refetchProposal(), onDealsChanged(), refreshActivities()]);
   };
 
   const handleSendEAgreement = async () => {
@@ -308,10 +400,10 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
     const now = new Date().toISOString();
     const ok = await onUpdate(deal.id, {
       agreement_sent_date: now,
-      sales_stage: 'Agreement Sent',
     });
     if (ok) {
       await addNote(deal.id, `eAgreement sent${eAgreementEmail ? ` to ${eAgreementEmail}` : ''}.`);
+      await refreshActivities();
       showToast('eAgreement marked as sent');
     }
     setEAgreementModal(false);
@@ -463,13 +555,13 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
             ) : (
               <h2 className="text-lg font-bold text-gray-900 leading-tight">{deal.title}</h2>
             )}
-            <p className="text-sm text-gray-500 mt-0.5">{deal.companies?.name ?? '—'}</p>
-            {assignedEmployee && (
-              <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
-                <User className="h-3 w-3" />
-                {assignedEmployee.first_name} {assignedEmployee.last_name}
-              </p>
-            )}
+            <DealCustomerHeader
+              deal={deal}
+              employees={employees}
+              onAssign={handleAssign}
+              onChooseSite={handleChooseSite}
+              onViewCustomer={onViewCustomer}
+            />
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
             {overdueTasks.length > 0 && (
@@ -494,7 +586,7 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
               Send to Customer
             </button>
             {!editing ? (
-              <button onClick={() => setEditing(true)} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500 transition-colors">
+              <button onClick={startEditing} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500 transition-colors">
                 <Edit3 className="h-4 w-4" />
               </button>
             ) : (
@@ -539,6 +631,18 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
         <div className="flex-1 overflow-y-auto">
           {activeTab === 'details' && (
             <div className="p-6 space-y-6">
+              <DealStatusCards deal={deal} onChange={handleStatusChange} />
+
+              <DealStory
+                deal={deal}
+                activities={activities}
+                employees={employees}
+                onOpenLink={handleStoryLink}
+                onAction={handleStoryAction}
+              />
+
+              <div className="border-t border-gray-100" />
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Deal Value</label>
@@ -574,45 +678,7 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Salesperson</label>
-                {editing ? (
-                  <select
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    value={form.assigned_employee_id ?? ''}
-                    onChange={e => setForm(f => ({ ...f, assigned_employee_id: e.target.value || null }))}
-                  >
-                    <option value="">— Unassigned —</option>
-                    {employees.map(emp => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.first_name} {emp.last_name} ({emp.role})
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="mt-1 flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
-                      <User className="h-3.5 w-3.5 text-blue-600" />
-                    </div>
-                    <p className="text-sm text-gray-900 font-medium">
-                      {assignedEmployee
-                        ? `${assignedEmployee.first_name} ${assignedEmployee.last_name}`
-                        : <span className="text-gray-400 font-normal">Unassigned</span>
-                      }
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Days in Stage</label>
-                  <div className={`mt-1 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-medium ${getAgingColor(days)}`}>
-                    <Clock className="h-3.5 w-3.5" />
-                    {days} days
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Forecast</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Forecast</label>
                   {editing ? (
                     <select
                       className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -626,33 +692,6 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
                       {FORECAST_CATEGORIES.find(f => f.value === deal.forecast_category)?.label}
                     </span>
                   )}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Pipeline Stages</label>
-                {[
-                  { label: 'Sales Stage', field: 'sales_stage' as const, options: SALES_STAGES },
-                  { label: 'Install Status', field: 'install_status' as const, options: INSTALL_STATUSES },
-                  { label: 'Office Status', field: 'office_status' as const, options: OFFICE_STATUSES },
-                ].map(({ label, field, options }) => (
-                  <div key={field} className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600 w-28">{label}</span>
-                    {editing ? (
-                      <select
-                        className="border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1 ml-2"
-                        value={form[field] ?? deal[field] ?? ''}
-                        onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
-                      >
-                        {options.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    ) : (
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStageColor(deal[field] ?? '')}`}>
-                        {deal[field] ?? '—'}
-                      </span>
-                    )}
-                  </div>
-                ))}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -678,22 +717,6 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
                   </p>
                 </div>
               </div>
-
-              {(deal.lost_reason || editing) && (
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Lost Reason</label>
-                  {editing ? (
-                    <input
-                      className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Why was this deal lost?"
-                      value={form.lost_reason ?? ''}
-                      onChange={e => setForm(f => ({ ...f, lost_reason: e.target.value }))}
-                    />
-                  ) : (
-                    <p className="mt-1 text-sm text-gray-900">{deal.lost_reason || '—'}</p>
-                  )}
-                </div>
-              )}
 
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Description</label>
@@ -783,23 +806,6 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
                   />
                 </div>
               )}
-
-              <div className="pt-2 border-t border-gray-100">
-                <div className="grid grid-cols-3 gap-3 text-center">
-                  {[
-                    { label: 'Proposal Sent', date: deal.proposal_sent_date },
-                    { label: 'Proposal Viewed', date: deal.proposal_viewed_date },
-                    { label: 'Agreement Sent', date: deal.agreement_sent_date },
-                  ].map(({ label, date }) => (
-                    <div key={label} className="bg-gray-50 rounded-lg p-2.5">
-                      <p className="text-xs text-gray-500">{label}</p>
-                      <p className="text-xs font-semibold text-gray-800 mt-0.5">
-                        {date ? new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
           )}
 
@@ -1422,9 +1428,17 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
       )}
 
       {toast && (
-        <div className="fixed bottom-6 right-6 z-[70] bg-gray-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl flex items-center gap-2">
+        <div className="fixed bottom-6 right-6 z-[70] bg-gray-900 text-white text-sm font-medium pl-4 pr-2 py-2.5 rounded-xl shadow-xl flex items-center gap-3">
           <div className="w-2 h-2 rounded-full bg-emerald-400" />
-          {toast}
+          {toast.message}
+          {toast.undo && (
+            <button
+              onClick={() => { const undo = toast.undo; setToast(null); undo?.(); }}
+              className="rounded-lg px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-white/10 transition-colors"
+            >
+              Undo
+            </button>
+          )}
         </div>
       )}
 
@@ -1435,7 +1449,7 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate }: Pr
       {showCreateWO && deal && (
         <WorkOrderModal
           onClose={() => setShowCreateWO(false)}
-          onSaved={() => { setShowCreateWO(false); refetchWorkOrders(); showToast('Work order created'); }}
+          onSaved={() => { setShowCreateWO(false); refetchWorkOrders(); onDealsChanged(); refreshActivities(); showToast('Work order created'); }}
           prefilledCompanyId={deal.company_id}
           prefilledDealId={deal.id}
           prefilledSiteId={deal.site_id ?? undefined}

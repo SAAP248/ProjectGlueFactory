@@ -124,7 +124,7 @@ function App() {
       case 'leads':
         return <Leads />;
       case 'deals':
-        return <Deals />;
+        return <Deals onViewCustomer={navigateToCustomer} onOpenInvoice={openInvoice} />;
       case 'projects':
         return <ProjectManagement />;
       case 'work-orders':

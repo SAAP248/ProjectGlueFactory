@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
-import type { Deal, DealActivity, DealTask, Employee } from './types';
+import type { Deal, DealActivity, DealTask, Employee, StatusField } from './types';
+import { getStatusGroup } from './types';
+
+const DEAL_SELECT = '*, companies(name, phone, email), sites(id, name, address, city, state, zip), assigned_employee:employees!deals_assigned_employee_id_fkey(first_name, last_name)';
 
 export function useDeals() {
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -10,7 +13,7 @@ export function useDeals() {
   const fetchDeals = useCallback(async () => {
     const { data } = await supabase
       .from('deals')
-      .select('*, companies(name), assigned_employee:employees!deals_assigned_employee_id_fkey(first_name, last_name)')
+      .select(DEAL_SELECT)
       .order('created_at', { ascending: false });
     if (data) setDeals(data as unknown as Deal[]);
   }, []);
@@ -27,50 +30,55 @@ export function useDeals() {
     Promise.all([fetchDeals(), fetchEmployees()]).finally(() => setLoading(false));
   }, [fetchDeals, fetchEmployees]);
 
+  const replaceDeal = useCallback((fresh: Deal) => {
+    setDeals(prev => prev.map(d => d.id === fresh.id ? fresh : d));
+  }, []);
+
   const updateDealStage = useCallback(async (
     dealId: string,
-    field: 'sales_stage' | 'install_status' | 'office_status',
-    newValue: string,
-    oldValue: string
-  ) => {
-    const updates: Partial<Deal> & { stage_entered_at?: string } = {
-      [field]: newValue,
-      updated_at: new Date().toISOString(),
-    };
-    if (field === 'sales_stage') {
-      updates.stage_entered_at = new Date().toISOString();
-    }
+    field: StatusField,
+    newValue: string | null,
+    oldValue: string | null,
+    extra: { reason?: string; updates?: Partial<Deal> } = {}
+  ): Promise<Deal | null> => {
+    const { data, error } = await supabase
+      .from('deals')
+      .update({ ...extra.updates, [field]: newValue, updated_at: new Date().toISOString() })
+      .eq('id', dealId)
+      .select(DEAL_SELECT)
+      .maybeSingle();
+    if (error || !data) return null;
+    replaceDeal(data as unknown as Deal);
 
-    const { error } = await supabase.from('deals').update(updates).eq('id', dealId);
-    if (!error) {
-      setDeals(prev => prev.map(d => d.id === dealId ? { ...d, ...updates } : d));
-      await supabase.from('deal_activities').insert({
-        deal_id: dealId,
-        activity_type: 'stage_change',
-        description: `Stage changed from "${oldValue}" to "${newValue}"`,
-        old_value: oldValue,
-        new_value: newValue,
-      });
-    }
-    return !error;
-  }, []);
+    const label = getStatusGroup(field).label;
+    const change = oldValue
+      ? `${label} status changed from "${oldValue}" to "${newValue ?? 'empty'}"`
+      : `${label} status set to "${newValue}"`;
+    await supabase.from('deal_activities').insert({
+      deal_id: dealId,
+      activity_type: 'stage_change',
+      description: extra.reason ? `${change}. Reason: ${extra.reason}` : change,
+      old_value: oldValue,
+      new_value: newValue,
+      status_field: field,
+    });
+    return data as unknown as Deal;
+  }, [replaceDeal]);
 
   const updateDeal = useCallback(async (dealId: string, updates: Partial<Deal>) => {
-    const { error } = await supabase.from('deals').update({
+    const { data, error } = await supabase.from('deals').update({
       ...updates,
       updated_at: new Date().toISOString(),
-    }).eq('id', dealId);
-    if (!error) {
-      setDeals(prev => prev.map(d => d.id === dealId ? { ...d, ...updates } : d));
-    }
+    }).eq('id', dealId).select(DEAL_SELECT).maybeSingle();
+    if (!error && data) replaceDeal(data as unknown as Deal);
     return !error;
-  }, []);
+  }, [replaceDeal]);
 
   const createDeal = useCallback(async (deal: Partial<Deal>) => {
     const { data, error } = await supabase.from('deals').insert({
       ...deal,
       stage_entered_at: new Date().toISOString(),
-    }).select('*, companies(name), assigned_employee:employees!deals_assigned_employee_id_fkey(first_name, last_name)').single();
+    }).select(DEAL_SELECT).single();
     if (!error && data) {
       setDeals(prev => [data as Deal, ...prev]);
       return data as Deal;
@@ -85,14 +93,19 @@ export function useDealActivities(dealId: string | null) {
   const [activities, setActivities] = useState<DealActivity[]>([]);
   const [tasks, setTasks] = useState<DealTask[]>([]);
 
-  useEffect(() => {
+  const refreshActivities = useCallback(async () => {
     if (!dealId) return;
-    supabase
+    const { data } = await supabase
       .from('deal_activities')
       .select('*')
       .eq('deal_id', dealId)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => { if (data) setActivities(data); });
+      .order('created_at', { ascending: false });
+    if (data) setActivities(data);
+  }, [dealId]);
+
+  useEffect(() => {
+    if (!dealId) return;
+    refreshActivities();
 
     supabase
       .from('deal_tasks')
@@ -100,7 +113,7 @@ export function useDealActivities(dealId: string | null) {
       .eq('deal_id', dealId)
       .order('due_date', { ascending: true })
       .then(({ data }) => { if (data) setTasks(data); });
-  }, [dealId]);
+  }, [dealId, refreshActivities]);
 
   const addNote = useCallback(async (dealId: string, note: string) => {
     const { data } = await supabase.from('deal_activities').insert({
@@ -125,5 +138,5 @@ export function useDealActivities(dealId: string | null) {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, is_done: isDone } : t));
   }, []);
 
-  return { activities, tasks, addNote, addTask, toggleTask };
+  return { activities, tasks, addNote, addTask, toggleTask, refreshActivities };
 }
