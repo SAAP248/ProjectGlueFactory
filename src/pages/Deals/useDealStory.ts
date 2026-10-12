@@ -310,6 +310,6 @@ function nextStep(deal: Deal, events: StoryEvent[], est: StoryEstimate | null, w
     case 'reviewed':
       return { message: 'Everything is paid. Ready for office review.', tone: 'good', action: { kind: 'office_reviewed', label: 'Mark Office Reviewed' } };
     default:
-      return { message: `Next up: ${current.label.toLowerCase()}.`, tone: 'info' };
+      return { message: `${current.label}.`, tone: 'info' };
   }
 }
