@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { Inspection, InspectionTemplate, InspectionFieldValue, TemplateSection } from './types';
 import FieldRenderer from './FieldRenderer';
+import { saveSystemTemplate } from './systemTemplates';
 import {
   ArrowLeft, ArrowRight, Save, CheckCircle2, Lock, Unlock, AlertTriangle,
   ClipboardCheck, Clock, FileText, Printer, Smartphone, Monitor,
@@ -122,6 +123,14 @@ export default function InspectionForm({ inspectionId, onBack, onNavigateToPrevi
       .from('inspections')
       .update({ updated_at: new Date().toISOString() })
       .eq('id', inspection.id);
+
+    const techName = inspection.employees
+      ? `${inspection.employees.first_name} ${inspection.employees.last_name}`
+      : null;
+    const savedSystemId = await saveSystemTemplate(inspection, fieldValues, techName);
+    if (savedSystemId && savedSystemId !== inspection.system_id) {
+      setInspection(prev => prev ? { ...prev, system_id: savedSystemId } : prev);
+    }
 
     setSaving(false);
     setLastSaved(new Date());
@@ -286,6 +295,11 @@ export default function InspectionForm({ inspectionId, onBack, onNavigateToPrevi
             </span>
           )}
           {saving && <span className="text-xs text-blue-500 animate-pulse">Saving...</span>}
+          {lastSaved && !saving && inspection.system_id && !mobilePreview && (
+            <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700" title="Panel, power and device details were saved to this system's template">
+              <CheckCircle2 className="h-3 w-3" /> Template updated
+            </span>
+          )}
 
           {/* Mobile preview toggle */}
           <button

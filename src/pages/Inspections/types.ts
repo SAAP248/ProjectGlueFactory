@@ -39,6 +39,7 @@ export interface Inspection {
   work_order_id: string | null;
   company_id: string | null;
   site_id: string | null;
+  system_id: string | null;
   technician_id: string | null;
   contact_id: string | null;
   status: 'draft' | 'completed';

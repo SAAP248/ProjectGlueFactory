@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { Search, Filter, ClipboardCheck, Calendar, User, Building2, ChevronRight, Plus, FileText } from 'lucide-react';
 import type { Inspection } from './types';
 
 interface Props {
+  tabs: ReactNode;
   inspections: Inspection[];
   loading: boolean;
   onView: (id: string) => void;
@@ -14,7 +16,7 @@ const STATUS_STYLES: Record<string, { label: string; bg: string; text: string }>
   completed: { label: 'Completed', bg: 'bg-emerald-50', text: 'text-emerald-700' },
 };
 
-export default function InspectionsList({ inspections, loading, onView, onNew }: Props) {
+export default function InspectionsList({ tabs, inspections, loading, onView, onNew }: Props) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
@@ -56,6 +58,8 @@ export default function InspectionsList({ inspections, loading, onView, onNew }:
           New Inspection
         </button>
       </div>
+
+      {tabs}
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">

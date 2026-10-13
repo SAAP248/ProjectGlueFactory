@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { X, Search, ClipboardCheck, Building2, MapPin, Check, FileText, ChevronRight } from 'lucide-react';
+import { X, Search, ClipboardCheck, Building2, MapPin, Check, FileText, ChevronRight, Cpu, Layers } from 'lucide-react';
+import { loadSiteSystems, loadTemplateForSystem, systemLabel, templateFieldRows } from './systemTemplates';
+import type { SystemOption, SystemTemplate } from './systemTemplates';
 
 interface Props {
   onClose: () => void;
   onCreate: (inspectionId: string) => void;
   preselectedWorkOrderId?: string;
+  preselected?: { companyId: string; siteId: string | null; systemId: string };
 }
 
 interface WorkOrderOption {
@@ -44,8 +47,8 @@ const TYPE_TABS = [
   { value: 'service', label: 'Service' },
 ];
 
-export default function NewInspectionModal({ onClose, onCreate, preselectedWorkOrderId }: Props) {
-  const [mode, setMode] = useState<Mode>(preselectedWorkOrderId ? 'with-wo' : 'choose');
+export default function NewInspectionModal({ onClose, onCreate, preselectedWorkOrderId, preselected }: Props) {
+  const [mode, setMode] = useState<Mode>(preselectedWorkOrderId ? 'with-wo' : preselected ? 'without-wo' : 'choose');
 
   const [workOrders, setWorkOrders] = useState<WorkOrderOption[]>([]);
   const [search, setSearch] = useState('');
@@ -62,6 +65,38 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
 
   const [sitesLoading, setSitesLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+
+  const [systems, setSystems] = useState<SystemOption[]>([]);
+  const [systemsLoading, setSystemsLoading] = useState(false);
+  const [selectedSystemId, setSelectedSystemId] = useState('');
+  const [systemTemplate, setSystemTemplate] = useState<SystemTemplate | null>(null);
+
+  const activeSiteId = mode === 'with-wo' ? selectedWO?.site_id || '' : selectedSiteId;
+
+  useEffect(() => {
+    setSystems([]);
+    setSelectedSystemId('');
+    if (!activeSiteId) return;
+    let cancelled = false;
+    setSystemsLoading(true);
+    loadSiteSystems(activeSiteId).then(list => {
+      if (cancelled) return;
+      setSystems(list);
+      const pre = preselected && list.find(s => s.id === preselected.systemId);
+      if (pre) setSelectedSystemId(pre.id);
+      else if (list.length === 1) setSelectedSystemId(list[0].id);
+      setSystemsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [activeSiteId]);
+
+  useEffect(() => {
+    setSystemTemplate(null);
+    if (!selectedSystemId) return;
+    let cancelled = false;
+    loadTemplateForSystem(selectedSystemId).then(t => { if (!cancelled) setSystemTemplate(t); });
+    return () => { cancelled = true; };
+  }, [selectedSystemId]);
 
   useEffect(() => {
     if (mode === 'with-wo' && workOrders.length === 0) loadWorkOrders();
@@ -94,6 +129,7 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
       .limit(500);
     setCustomers((data as CustomerOption[]) || []);
     setManualLoading(false);
+    if (preselected) handleCustomerChange(preselected.companyId);
   }
 
   async function loadSites(companyId: string) {
@@ -104,6 +140,7 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
       .eq('company_id', companyId)
       .order('name');
     setSites((data as SiteOption[]) || []);
+    if (preselected?.siteId && preselected.companyId === companyId) setSelectedSiteId(preselected.siteId);
     setSitesLoading(false);
   }
 
@@ -289,6 +326,7 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
         work_order_id: workOrderId,
         company_id: companyId,
         site_id: siteId,
+        system_id: selectedSystemId || null,
         technician_id: techEmployeeId,
         contact_id: contactId,
         status: 'draft',
@@ -326,6 +364,9 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
           });
         });
       });
+      if (systemTemplate) {
+        prefillRows.push(...templateFieldRows(systemTemplate, fullTmpl.pages, newInspection.id));
+      }
       if (prefillRows.length > 0) {
         await supabase.from('inspection_field_values').upsert(prefillRows, { onConflict: 'inspection_id,field_id' });
       }
@@ -334,6 +375,52 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
     setCreating(false);
     onCreate(newInspection.id);
   }
+
+  const systemSection = (
+    <div className="mt-4">
+      <label className="block text-sm font-medium text-gray-700 mb-1.5">System</label>
+      {systemsLoading ? (
+        <div className="flex items-center gap-2 py-3 text-sm text-gray-400">
+          <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent" />
+          Loading systems...
+        </div>
+      ) : systems.length === 0 ? (
+        <p className="text-xs text-gray-400 py-2">This site has no systems on file, so no template will be saved.</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {systems.map(s => {
+            const isSelected = selectedSystemId === s.id;
+            const panel = [s.panel_make, s.panel_model].filter(Boolean).join(' ');
+            return (
+              <button
+                key={s.id}
+                onClick={() => setSelectedSystemId(isSelected ? '' : s.id)}
+                className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left transition-all ${
+                  isSelected ? 'border-blue-400 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <Cpu className={`h-4 w-4 flex-shrink-0 ${isSelected ? 'text-blue-600' : 'text-gray-400'}`} />
+                <span className="min-w-0">
+                  <span className={`block text-sm font-medium truncate ${isSelected ? 'text-blue-700' : 'text-gray-800'}`}>{systemLabel(s)}</span>
+                  {panel && s.name && <span className="block text-xs text-gray-400 truncate">{panel}</span>}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {systemTemplate && (
+        <div className="mt-3 flex items-start gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2.5">
+          <Layers className="h-4 w-4 text-teal-600 mt-0.5 flex-shrink-0" />
+          <p className="text-xs text-teal-800">
+            <span className="font-semibold">Saved template found.</span>{' '}
+            Panel details, battery info, {systemTemplate.devices.length} device{systemTemplate.devices.length === 1 ? '' : 's'} and{' '}
+            {systemTemplate.notification_appliances.length} notification appliance{systemTemplate.notification_appliances.length === 1 ? '' : 's'} will be filled in.
+          </p>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -493,6 +580,8 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
             </>
           )}
 
+          {mode === 'with-wo' && selectedWO?.site_id && systemSection}
+
           {/* Without Work Order mode */}
           {mode === 'without-wo' && (
             <>
@@ -596,6 +685,8 @@ export default function NewInspectionModal({ onClose, onCreate, preselectedWorkO
                       )}
                     </div>
                   )}
+
+                  {selectedSiteId && systemSection}
 
                   {/* Selection summary */}
                   {selectedCustomerId && selectedSiteId && (() => {
