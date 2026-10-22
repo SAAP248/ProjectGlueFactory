@@ -20,17 +20,13 @@ export function useAppSetting(key: string): [string, boolean] {
   const [loading, setLoading] = useState(!fetched);
 
   useEffect(() => {
-    if (fetched) {
-      setValue(cache[key] ?? '');
-      setLoading(false);
-      return;
-    }
     const listener = () => {
       setValue(cache[key] ?? '');
       setLoading(false);
     };
     listeners.push(listener);
-    if (!fetched) loadAll();
+    if (fetched) listener();
+    else loadAll();
     return () => { listeners = listeners.filter(l => l !== listener); };
   }, [key]);
 

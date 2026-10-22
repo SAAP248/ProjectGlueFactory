@@ -3,11 +3,12 @@ import {
   Settings as SettingsIcon, User, Bell, Shield as ShieldIcon, Database,
   ShieldAlert, Flame, ShieldCheck, KeyRound, Network, Tv2, DoorOpen,
   Plus, Trash2, GripVertical, CheckCircle2, RotateCcw, Map, Eye, EyeOff,
-  ExternalLink, Check, Loader2, BookOpen
+  ExternalLink, Check, Loader2, BookOpen, PanelLeft
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAppSetting, saveAppSetting } from '../lib/useAppSettings';
 import ProposalDefaultsPanel from './Estimates/ProposalDefaultsPanel';
+import SidebarMenuPanel from './Settings/SidebarMenuPanel';
 
 interface SystemType {
   id: string;
@@ -48,7 +49,7 @@ const iconComponentMap: Record<string, React.ElementType> = {
 };
 
 export default function Settings() {
-  const [activeSection, setActiveSection] = useState<'system-types' | 'go-back-reasons' | 'integrations' | 'proposal-defaults'>('integrations');
+  const [activeSection, setActiveSection] = useState<'system-types' | 'go-back-reasons' | 'integrations' | 'proposal-defaults' | 'sidebar-menu'>('integrations');
 
   const [systemTypes, setSystemTypes] = useState<SystemType[]>([]);
   const [loadingTypes, setLoadingTypes] = useState(true);
@@ -205,10 +206,22 @@ export default function Settings() {
           <BookOpen className="h-4 w-4" />
           Proposal Defaults
         </button>
+        <button
+          onClick={() => setActiveSection('sidebar-menu')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeSection === 'sidebar-menu'
+              ? 'bg-blue-600 text-white'
+              : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          <PanelLeft className="h-4 w-4" />
+          Sidebar Menu
+        </button>
       </div>
 
       {activeSection === 'integrations' && <IntegrationsPanel />}
       {activeSection === 'proposal-defaults' && <ProposalDefaultsPanel />}
+      {activeSection === 'sidebar-menu' && <SidebarMenuPanel />}
 
       {activeSection === 'system-types' && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">

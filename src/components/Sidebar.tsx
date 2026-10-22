@@ -1,42 +1,20 @@
 import { useState, useEffect } from 'react';
 import {
-  Bell,
-  Calendar,
-  MapPin,
-  Radio,
-  Users,
-  MessageSquare,
-  TrendingUp,
-  Briefcase,
-  ClipboardCheck,
-  ClipboardList,
-  CheckSquare,
-  Package,
-  DollarSign,
-  Clock,
-  BarChart3,
-  Settings,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  Warehouse,
-  ShoppingCart,
-  Box,
   LogIn,
   LogOut,
   Smartphone,
   Globe,
-  LifeBuoy,
-  PhoneCall,
-  Camera,
-  FileText,
-  Hash,
-  UserCog,
   ShoppingBag,
-  ShieldCheck,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useRole } from '../contexts/RoleContext';
 import { canAccessPage } from '../config/roleAccess';
+import { useSidebarLayout, mainEntriesInOrder, groupItemsInOrder, groupEntryId } from '../config/sidebarMenu';
+import type { GroupKey, MenuItem } from '../config/sidebarMenu';
+import SidebarMenuEditor from './SidebarMenuEditor';
 
 interface SidebarProps {
   currentPage: string;
@@ -44,48 +22,6 @@ interface SidebarProps {
   collapsed: boolean;
   setCollapsed: (collapsed: boolean) => void;
 }
-
-const topNavItems = [
-  { id: 'alarm-dashboard', label: 'Alarm Dashboard', icon: Bell },
-  { id: 'dispatch', label: 'Dispatch', icon: Radio },
-  { id: 'calendar', label: 'Calendar', icon: Calendar },
-  { id: 'customers', label: 'Customers', icon: Users },
-  { id: 'chat', label: 'Messages', icon: MessageSquare },
-  { id: 'team-chat', label: 'Team Chat', icon: Hash },
-  { id: 'leads', label: 'Leads', icon: PhoneCall },
-  { id: 'photos', label: 'Photos', icon: Camera },
-  { id: 'documents', label: 'Documents', icon: FileText },
-  { id: 'deals', label: 'Deals', icon: TrendingUp },
-  { id: 'projects', label: 'Projects', icon: Briefcase },
-  { id: 'work-orders', label: 'Work Orders', icon: ClipboardList },
-  { id: 'service-plans', label: 'Service Plans', icon: ShieldCheck },
-  { id: 'tickets', label: 'Tickets', icon: LifeBuoy },
-  { id: 'inspections', label: 'Inspections', icon: ClipboardCheck },
-  { id: 'tasks', label: 'Tasks', icon: CheckSquare },
-];
-
-const inventoryItems = [
-  { id: 'warehouses', label: 'Warehouses', icon: Warehouse },
-  { id: 'distributors', label: 'Distributors', icon: ShoppingCart },
-  { id: 'purchase-orders', label: 'Purchase Orders', icon: ShoppingCart },
-  { id: 'products', label: 'Products', icon: Box },
-  { id: 'packages', label: 'Packages', icon: Package },
-  { id: 'site-inventory', label: 'Site Inventory', icon: MapPin },
-];
-
-const accountingItems = [
-  { id: 'estimates', label: 'Estimates', icon: DollarSign },
-  { id: 'invoices', label: 'Invoices', icon: DollarSign },
-  { id: 'statements', label: 'Statements', icon: DollarSign },
-  { id: 'transactions', label: 'Transactions', icon: DollarSign },
-];
-
-const bottomNavItems = [
-  { id: 'time-attendance', label: 'Time & Attendance', icon: Clock },
-  { id: 'user-management', label: 'User Management', icon: UserCog },
-  { id: 'reports', label: 'Reports', icon: BarChart3 },
-  { id: 'settings', label: 'Settings', icon: Settings },
-];
 
 const portalItems = [
   { id: 'technician-portal', label: 'Tech Portal', icon: Smartphone },
@@ -106,8 +42,10 @@ function formatTime(date: Date) {
 
 export default function Sidebar({ currentPage, setCurrentPage, collapsed, setCollapsed }: SidebarProps) {
   const { role, meta } = useRole();
-  const [inventoryOpen, setInventoryOpen] = useState(false);
-  const [accountingOpen, setAccountingOpen] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<GroupKey, boolean>>({ inventory: false, accounting: false });
+  const [editing, setEditing] = useState(false);
+  const [layout] = useSidebarLayout();
+  const isAdmin = role === 'admin';
   const [isClockedIn, setIsClockedIn] = useState(false);
   const [clockInTime, setClockInTime] = useState<Date | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -132,16 +70,11 @@ export default function Sidebar({ currentPage, setCurrentPage, collapsed, setCol
     }
   };
 
-  const filteredTopNav = topNavItems.filter(i => canAccessPage(role, i.id));
-  const filteredInventory = inventoryItems.filter(i => canAccessPage(role, i.id));
-  const filteredAccounting = accountingItems.filter(i => canAccessPage(role, i.id));
-  const filteredBottom = bottomNavItems.filter(i => canAccessPage(role, i.id));
+  const hidden = new Set(layout.hidden);
+  const visible = (id: string) => !hidden.has(id) && canAccessPage(role, id);
   const filteredPortals = portalItems.filter(i => canAccessPage(role, i.id));
 
-  const isInventoryActive = filteredInventory.some(i => i.id === currentPage);
-  const isAccountingActive = filteredAccounting.some(i => i.id === currentPage);
-
-  const renderNavButton = (item: { id: string; label: string; icon: React.ElementType }, indented = false) => {
+  const renderNavButton = (item: MenuItem, indented = false) => {
     const isActive = currentPage === item.id;
     const Icon = item.icon;
     return (
@@ -235,62 +168,55 @@ export default function Sidebar({ currentPage, setCurrentPage, collapsed, setCol
         )}
       </div>
 
-      {/* Nav Items */}
+      {editing && !collapsed ? (
+        <SidebarMenuEditor initial={layout} onClose={() => setEditing(false)} />
+      ) : (
       <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
-        {filteredTopNav.map(item => renderNavButton(item))}
-
-        {/* Inventory Dropdown */}
-        {filteredInventory.length > 0 && (
-          <div>
-            <button
-              onClick={() => !collapsed && setInventoryOpen(o => !o)}
-              className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
-                isInventoryActive ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <Package className={`h-5 w-5 flex-shrink-0 ${collapsed ? '' : 'mr-3'}`} />
-              {!collapsed && (
-                <>
-                  <span className="flex-1 truncate text-left">Inventory</span>
-                  <ChevronDown className={`h-4 w-4 flex-shrink-0 transition-transform ${inventoryOpen ? 'rotate-0' : '-rotate-90'}`} />
-                </>
+        {mainEntriesInOrder(layout).map(entry => {
+          if (entry.kind === 'item') return visible(entry.item.id) ? renderNavButton(entry.item) : null;
+          const { group } = entry;
+          if (hidden.has(groupEntryId(group.id))) return null;
+          const items = groupItemsInOrder(layout, group.id).filter(i => visible(i.id));
+          if (items.length === 0) return null;
+          const open = openGroups[group.id];
+          const active = items.some(i => i.id === currentPage);
+          const GroupIcon = group.icon;
+          return (
+            <div key={group.id}>
+              <button
+                onClick={() => !collapsed && setOpenGroups(o => ({ ...o, [group.id]: !o[group.id] }))}
+                className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+                  active ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <GroupIcon className={`h-5 w-5 flex-shrink-0 ${collapsed ? '' : 'mr-3'}`} />
+                {!collapsed && (
+                  <>
+                    <span className="flex-1 truncate text-left">{group.label}</span>
+                    <ChevronDown className={`h-4 w-4 flex-shrink-0 transition-transform ${open ? 'rotate-0' : '-rotate-90'}`} />
+                  </>
+                )}
+              </button>
+              {!collapsed && open && (
+                <div className="mt-0.5 space-y-0.5">
+                  {items.map(item => renderNavButton(item, true))}
+                </div>
               )}
-            </button>
-            {!collapsed && inventoryOpen && (
-              <div className="mt-0.5 space-y-0.5">
-                {filteredInventory.map(item => renderNavButton(item, true))}
-              </div>
-            )}
-          </div>
-        )}
+            </div>
+          );
+        })}
 
-        {/* Accounting Dropdown */}
-        {filteredAccounting.length > 0 && (
-          <div>
-            <button
-              onClick={() => !collapsed && setAccountingOpen(o => !o)}
-              className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
-                isAccountingActive ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <DollarSign className={`h-5 w-5 flex-shrink-0 ${collapsed ? '' : 'mr-3'}`} />
-              {!collapsed && (
-                <>
-                  <span className="flex-1 truncate text-left">Accounting</span>
-                  <ChevronDown className={`h-4 w-4 flex-shrink-0 transition-transform ${accountingOpen ? 'rotate-0' : '-rotate-90'}`} />
-                </>
-              )}
-            </button>
-            {!collapsed && accountingOpen && (
-              <div className="mt-0.5 space-y-0.5">
-                {filteredAccounting.map(item => renderNavButton(item, true))}
-              </div>
-            )}
-          </div>
+        {isAdmin && !collapsed && (
+          <button
+            onClick={() => setEditing(true)}
+            className="mt-2 w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-400 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Edit menu
+          </button>
         )}
-
-        {filteredBottom.map(item => renderNavButton(item))}
       </nav>
+      )}
 
       {/* Portals section — pinned at bottom above footer */}
       {filteredPortals.length > 0 && (
