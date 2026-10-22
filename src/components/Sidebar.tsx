@@ -168,6 +168,22 @@ export default function Sidebar({ currentPage, setCurrentPage, collapsed, setCol
         )}
       </div>
 
+      {isAdmin && !editing && (
+        <div className={`flex-shrink-0 border-b border-gray-100 ${collapsed ? 'px-2 py-1.5' : 'flex items-center justify-between px-4 py-1.5'}`}>
+          {!collapsed && <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Menu</span>}
+          <button
+            onClick={() => { setCollapsed(false); setEditing(true); }}
+            title="Rearrange or hide menu pages"
+            className={`flex items-center gap-1.5 rounded-md text-xs font-medium text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600 ${
+              collapsed ? 'w-full justify-center p-2' : 'px-2 py-1'
+            }`}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            {!collapsed && 'Edit menu'}
+          </button>
+        </div>
+      )}
+
       {editing && !collapsed ? (
         <SidebarMenuEditor initial={layout} onClose={() => setEditing(false)} />
       ) : (
@@ -205,16 +221,6 @@ export default function Sidebar({ currentPage, setCurrentPage, collapsed, setCol
             </div>
           );
         })}
-
-        {isAdmin && !collapsed && (
-          <button
-            onClick={() => setEditing(true)}
-            className="mt-2 w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-400 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            Edit menu
-          </button>
-        )}
       </nav>
       )}
 
