@@ -108,6 +108,26 @@ function generateEstimateNumber(): string {
   return `EST-${new Date().toISOString().slice(0, 10)}-${suffix}`;
 }
 
+export async function createDealEstimate(deal: { id: string; company_id: string; site_id: string | null }): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('estimates')
+    .insert({
+      deal_id: deal.id,
+      company_id: deal.company_id,
+      site_id: deal.site_id,
+      status: 'draft',
+      estimate_number: generateEstimateNumber(),
+      estimate_date: new Date().toISOString().slice(0, 10),
+      subtotal: 0,
+      tax: 0,
+      total: 0,
+    })
+    .select('id')
+    .maybeSingle();
+  if (error || !data) return null;
+  return data.id as string;
+}
+
 export function useEstimateList(companyId?: string) {
   const [estimates, setEstimates] = useState<EstimateRecord[]>([]);
   const [convertedIds, setConvertedIds] = useState<Set<string>>(new Set());

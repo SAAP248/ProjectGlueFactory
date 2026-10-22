@@ -88,7 +88,7 @@ export interface DealAccounting {
 }
 
 function pickPrimaryEstimate(estimates: DealEstimate[]): DealEstimate | null {
-  return estimates.find(e => e.status === 'accepted') ?? estimates[0] ?? null;
+  return estimates.find(e => e.status === 'accepted' || e.status === 'approved') ?? estimates[0] ?? null;
 }
 
 async function loadDealAccounting(dealId: string): Promise<DealAccounting> {

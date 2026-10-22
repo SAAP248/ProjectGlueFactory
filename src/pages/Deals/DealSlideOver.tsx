@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   X, MessageSquare, CheckSquare, Plus, Clock, CreditCard as Edit3, Save,
-  AlertCircle, Send, FileText, User, Trash2, GripVertical, ShoppingBag, Search,
-  Wrench, FolderKanban, Calendar, ChevronDown, ChevronUp, Timer, Navigation, BookOpen, Eye,
+  AlertCircle, Send, FileText, User,
+  Wrench, FolderKanban, Calendar, ChevronDown, ChevronUp, Timer, Navigation,
 } from 'lucide-react';
 import type { Deal, Employee, StatusField } from './types';
 import { useDealActivities } from './useDeals';
@@ -14,45 +14,18 @@ import DealCustomerHeader from './DealCustomerHeader';
 import DealStatusCards from './DealStatusCards';
 import DealStory from './DealStory';
 import DealAccountingTab from './DealAccountingTab';
+import DealProposalCard, { type DealProposal } from './DealProposalCard';
+import DealInstallPanel from './DealInstallPanel';
+import EstimatePanel from '../Estimates/EstimatePanel';
 import type { NextStep, StoryLink } from './useDealStory';
 import WorkOrderModal from '../WorkOrders/WorkOrderModal';
 import SendToCustomerModal from '../Estimates/SendToCustomerModal';
-import { customerEstimateLink } from '../Estimates/useEstimates';
+import { createDealEstimate } from '../Estimates/useEstimates';
 import NewProjectModal from '../ProjectManagement/NewProjectModal';
 import SalesCallActions from './SalesCallActions';
 import { useDealTimeTracker } from '../../lib/useDealTimeTracker';
 import type { SalesCallStatus } from '../../lib/dealLifecycle';
 import { getDealTimeEntries, calculateSalesCallDuration } from '../../lib/dealLifecycle';
-
-interface CatalogProduct {
-  id: string;
-  sku: string;
-  name: string;
-  category: string;
-  cost: number;
-  price: number;
-  image_url: string | null;
-}
-
-function useProductCatalog() {
-  const [products, setProducts] = useState<CatalogProduct[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    setLoading(true);
-    supabase
-      .from('products')
-      .select('id,sku,name,category,cost,price,image_url')
-      .eq('is_active', true)
-      .order('category')
-      .then(({ data }) => {
-        setProducts((data ?? []) as CatalogProduct[]);
-        setLoading(false);
-      });
-  }, []);
-
-  return { products, loading };
-}
 
 interface Props {
   deal: Deal | null;
@@ -91,77 +64,29 @@ function formFromDeal(deal: Deal): Partial<Deal> {
   };
 }
 
-type ActiveTab = 'details' | 'proposal' | 'work_orders' | 'accounting' | 'activity' | 'tasks' | 'time';
-
-interface LineItem {
-  id: string;
-  description: string;
-  quantity: number;
-  unit_price: number;
-  unit_cost: number;
-  total: number;
-  sort_order: number;
-  isNew?: boolean;
-}
-
-interface ProposalMeta {
-  public_token: string;
-  view_mode: 'estimate' | 'proposal';
-  sent_at: string | null;
-  viewed_at: string | null;
-}
+type ActiveTab = 'details' | 'work_orders' | 'accounting' | 'activity' | 'tasks' | 'time';
 
 function useProposal(dealId: string | null) {
-  const [estimateId, setEstimateId] = useState<string | null>(null);
-  const [meta, setMeta] = useState<ProposalMeta | null>(null);
-  const [lineItems, setLineItems] = useState<LineItem[]>([]);
-  const [notes, setNotes] = useState('');
-  const [terms, setTerms] = useState('');
+  const [proposal, setProposal] = useState<DealProposal | null>(null);
   const [loading, setLoading] = useState(false);
 
   const fetch = useCallback(async () => {
     if (!dealId) return;
     setLoading(true);
-    const { data: est } = await supabase
+    const { data } = await supabase
       .from('estimates')
-      .select('id, notes, terms, public_token, view_mode, sent_at, viewed_at')
+      .select('id, estimate_number, status, total, public_token, view_mode, sent_at, viewed_at')
       .eq('deal_id', dealId)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle();
-
-    if (est) {
-      setEstimateId(est.id);
-      setMeta({ public_token: est.public_token, view_mode: est.view_mode, sent_at: est.sent_at, viewed_at: est.viewed_at });
-      setNotes(est.notes ?? '');
-      setTerms(est.terms ?? '');
-      const { data: items } = await supabase
-        .from('estimate_line_items')
-        .select('*')
-        .eq('estimate_id', est.id)
-        .order('sort_order');
-      setLineItems((items ?? []).map(i => ({
-        id: i.id,
-        description: i.description ?? '',
-        quantity: Number(i.quantity),
-        unit_price: Number(i.unit_price),
-        unit_cost: Number(i.unit_cost),
-        total: Number(i.total),
-        sort_order: i.sort_order ?? 0,
-      })));
-    } else {
-      setEstimateId(null);
-      setMeta(null);
-      setLineItems([]);
-      setNotes('');
-      setTerms('');
-    }
+    setProposal((data as DealProposal | null) ?? null);
     setLoading(false);
   }, [dealId]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  return { estimateId, meta, lineItems, setLineItems, notes, setNotes, terms, setTerms, loading, refetch: fetch };
+  return { proposal, loading, refetch: fetch };
 }
 
 interface DealWorkOrder {
@@ -209,20 +134,16 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
   const [toast, setToast] = useState<UndoToast | null>(null);
   const [eAgreementModal, setEAgreementModal] = useState(false);
   const [eAgreementEmail, setEAgreementEmail] = useState('');
-  const [proposalSaving, setProposalSaving] = useState(false);
-  const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
-  const [dragSourceItemId, setDragSourceItemId] = useState<string | null>(null);
-  const [showCatalog, setShowCatalog] = useState(false);
-  const [catalogSearch, setCatalogSearch] = useState('');
-  const [catalogCategory, setCatalogCategory] = useState('');
-  const { products: catalogProducts, loading: catalogLoading } = useProductCatalog();
 
   const { activities, tasks, addNote, addTask, toggleTask, refreshActivities } = useDealActivities(deal?.id ?? null);
-  const { estimateId, meta: proposalMeta, lineItems, setLineItems, notes, setNotes, terms, setTerms, loading: proposalLoading, refetch: refetchProposal } = useProposal(deal?.id ?? null);
+  const { proposal, loading: proposalLoading, refetch: refetchProposal } = useProposal(deal?.id ?? null);
+  const estimateId = proposal?.id ?? null;
+  const [editingEstimateId, setEditingEstimateId] = useState<string | null>(null);
+  const [creatingEstimate, setCreatingEstimate] = useState(false);
+  const [accountingRefresh, setAccountingRefresh] = useState(0);
   const { workOrders, loading: workOrdersLoading, refetch: refetchWorkOrders } = useDealWorkOrders(deal?.id ?? null);
   const [showCreateWO, setShowCreateWO] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
-  const [scopeExpanded, setScopeExpanded] = useState(false);
   const [termsExpanded, setTermsExpanded] = useState(false);
 
   // Sales call and time tracking
@@ -333,14 +254,14 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
   };
 
   const handleStoryLink = (link: StoryLink) => {
-    if (link.type === 'estimate') setActiveTab('proposal');
+    if (link.type === 'estimate') { if (estimateId) setEditingEstimateId(estimateId); }
     else if (link.type === 'work_order') setActiveTab('work_orders');
     else if (onOpenInvoice) onOpenInvoice(link.id);
   };
 
   const handleStoryAction = async (action: NonNullable<NextStep['action']>) => {
     switch (action.kind) {
-      case 'create_estimate': setActiveTab('proposal'); break;
+      case 'create_estimate': await handleCreateEstimate(); break;
       case 'send_estimate': openSend(); break;
       case 'follow_up': {
         const due = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
@@ -383,11 +304,32 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
 
   const openSend = () => {
     if (!estimateId) {
-      showToast('No proposal on this deal yet. Create one with the New Deal wizard.');
+      showToast('No estimate on this deal yet. Create one from the Details tab.');
       return;
     }
     setSendOpen(true);
   };
+
+  async function handleCreateEstimate() {
+    if (estimateId) { setEditingEstimateId(estimateId); return; }
+    setCreatingEstimate(true);
+    const id = await createDealEstimate(deal!);
+    setCreatingEstimate(false);
+    if (!id) { showToast('Could not create the estimate. Please try again.'); return; }
+    await refetchProposal();
+    setEditingEstimateId(id);
+  }
+
+  async function handleEstimateChanged() {
+    if (!editingEstimateId) return;
+    const { data } = await supabase.from('estimates').select('total').eq('id', editingEstimateId).maybeSingle();
+    const total = data ? Number(data.total) : null;
+    if (total !== null && total !== Number(deal!.value)) {
+      await onUpdate(deal!.id, { value: total });
+    }
+    await refetchProposal();
+    setAccountingRefresh(n => n + 1);
+  }
 
   const handleProposalSent = async (mode: 'estimate' | 'proposal') => {
     const ok = await onUpdate(deal.id, {
@@ -413,129 +355,8 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
     setSaving(false);
   };
 
-  function addProductFromCatalog(product: CatalogProduct) {
-    const newItem: LineItem = {
-      id: crypto.randomUUID(),
-      description: product.name,
-      quantity: 1,
-      unit_price: product.price,
-      unit_cost: product.cost,
-      total: product.price,
-      sort_order: lineItems.length,
-      isNew: true,
-    };
-    setLineItems(prev => [...prev, newItem]);
-  }
-
-  function addLineItem() {
-    const newItem: LineItem = {
-      id: crypto.randomUUID(),
-      description: '',
-      quantity: 1,
-      unit_price: 0,
-      unit_cost: 0,
-      total: 0,
-      sort_order: lineItems.length,
-      isNew: true,
-    };
-    setLineItems(prev => [...prev, newItem]);
-  }
-
-  function updateLineItem(id: string, updates: Partial<LineItem>) {
-    setLineItems(prev => prev.map(i => {
-      if (i.id !== id) return i;
-      const updated = { ...i, ...updates };
-      updated.total = Number(updated.quantity) * Number(updated.unit_price);
-      return updated;
-    }));
-  }
-
-  function removeLineItem(id: string) {
-    setLineItems(prev => prev.filter(i => i.id !== id));
-  }
-
-  function handleItemDragStart(e: React.DragEvent, id: string) {
-    setDragSourceItemId(id);
-    e.dataTransfer.effectAllowed = 'move';
-  }
-
-  function handleItemDrop(e: React.DragEvent, targetId: string) {
-    e.preventDefault();
-    if (!dragSourceItemId || dragSourceItemId === targetId) {
-      setDragOverItemId(null);
-      return;
-    }
-    const srcIdx = lineItems.findIndex(i => i.id === dragSourceItemId);
-    const tgtIdx = lineItems.findIndex(i => i.id === targetId);
-    if (srcIdx === -1 || tgtIdx === -1) { setDragOverItemId(null); return; }
-    const reordered = [...lineItems];
-    const [moved] = reordered.splice(srcIdx, 1);
-    reordered.splice(tgtIdx, 0, moved);
-    setLineItems(reordered.map((item, idx) => ({ ...item, sort_order: idx })));
-    setDragSourceItemId(null);
-    setDragOverItemId(null);
-  }
-
-  const handleSaveProposal = async () => {
-    if (!estimateId) return;
-    setProposalSaving(true);
-
-    const subtotal = lineItems.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0);
-    await supabase.from('estimates').update({
-      notes,
-      terms,
-      subtotal,
-      total: subtotal,
-      updated_at: new Date().toISOString(),
-    }).eq('id', estimateId);
-
-    const existingItems = lineItems.filter(i => !i.isNew);
-    const newItems = lineItems.filter(i => i.isNew);
-
-    for (const item of existingItems) {
-      await supabase.from('estimate_line_items').update({
-        description: item.description,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        unit_cost: item.unit_cost,
-        total: item.total,
-        sort_order: item.sort_order,
-      }).eq('id', item.id);
-    }
-
-    if (newItems.length > 0) {
-      await supabase.from('estimate_line_items').insert(newItems.map(i => ({
-        estimate_id: estimateId,
-        description: i.description,
-        quantity: i.quantity,
-        unit_price: i.unit_price,
-        unit_cost: i.unit_cost,
-        total: i.total,
-        sort_order: i.sort_order,
-      })));
-    }
-
-    await onUpdate(deal.id, { value: subtotal });
-    await refetchProposal();
-    setProposalSaving(false);
-    trackAction('proposal_saved', `Subtotal: $${subtotal.toFixed(2)}`);
-    showToast('Proposal saved');
-  };
-
-  const proposalTotal = lineItems.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0);
-  const proposalCost = lineItems.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_cost), 0);
-  const proposalMargin = proposalTotal > 0 ? ((proposalTotal - proposalCost) / proposalTotal) * 100 : 0;
-
-  const filteredCatalogProducts = catalogProducts.filter(p => {
-    const matchesSearch = !catalogSearch || p.name.toLowerCase().includes(catalogSearch.toLowerCase()) || p.sku.toLowerCase().includes(catalogSearch.toLowerCase());
-    const matchesCategory = !catalogCategory || p.category === catalogCategory;
-    return matchesSearch && matchesCategory;
-  });
-  const catalogCategories = Array.from(new Set(catalogProducts.map(p => p.category))).sort();
-
   const tabs: { key: ActiveTab; label: string; count?: number }[] = [
     { key: 'details', label: 'Details' },
-    { key: 'proposal', label: 'Proposal' },
     { key: 'work_orders', label: 'Work Orders', count: workOrders.length },
     { key: 'accounting', label: 'Accounting' },
     { key: 'time', label: 'Time' },
@@ -636,6 +457,15 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
             <div className="p-6 space-y-6">
               <DealStatusCards deal={deal} onChange={handleStatusChange} />
 
+              <DealProposalCard
+                proposal={proposal}
+                loading={proposalLoading}
+                creating={creatingEstimate}
+                onOpen={() => proposal && setEditingEstimateId(proposal.id)}
+                onSend={openSend}
+                onCreate={handleCreateEstimate}
+              />
+
               <DealStory
                 deal={deal}
                 activities={activities}
@@ -735,32 +565,22 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
                 )}
               </div>
 
-              {(deal.scope_of_work || editing) && (
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => setScopeExpanded(e => !e)}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700"
-                  >
-                    Scope of Work
-                    {scopeExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                  </button>
-                  {scopeExpanded && (
-                    editing ? (
-                      <textarea
-                        rows={4}
-                        className="mt-1.5 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                        value={form.scope_of_work ?? ''}
-                        onChange={e => setForm(f => ({ ...f, scope_of_work: e.target.value }))}
-                      />
-                    ) : (
-                      <p className="mt-1.5 text-sm text-gray-600 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-lg p-3 border border-gray-100">
-                        {deal.scope_of_work || '—'}
-                      </p>
-                    )
-                  )}
-                </div>
-              )}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Scope of Work</label>
+                {editing ? (
+                  <textarea
+                    rows={4}
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    value={form.scope_of_work ?? ''}
+                    onChange={e => setForm(f => ({ ...f, scope_of_work: e.target.value }))}
+                    placeholder="What will be installed and where..."
+                  />
+                ) : (
+                  <p className="mt-1 text-sm text-gray-600 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-lg p-3 border border-gray-100">
+                    {deal.scope_of_work || 'No scope of work written yet.'}
+                  </p>
+                )}
+              </div>
 
               {(deal.terms_and_conditions || editing) && (
                 <div>
@@ -812,286 +632,14 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
             </div>
           )}
 
-          {activeTab === 'proposal' && (
-            <div className="p-6 space-y-5">
-              {proposalLoading ? (
-                <div className="text-center py-12 text-gray-400 text-sm">Loading proposal…</div>
-              ) : !estimateId ? (
-                <div className="text-center py-12">
-                  <FileText className="h-10 w-10 mx-auto mb-3 text-gray-300" />
-                  <p className="text-gray-500 text-sm font-medium">No proposal attached to this deal yet.</p>
-                  <p className="text-gray-400 text-xs mt-1">Create a new deal with the wizard to generate a proposal.</p>
-                </div>
-              ) : (
-                <>
-                  {/* Proposal Link Actions */}
-                  <div className="flex flex-wrap items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
-                    <div className="flex-1 min-w-[180px]">
-                      <p className="flex items-center gap-1.5 text-xs font-semibold text-blue-900">
-                        {proposalMeta?.view_mode === 'proposal' ? <BookOpen className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
-                        {proposalMeta?.sent_at ? 'Sent as' : 'Will show as'} {proposalMeta?.view_mode === 'proposal' ? 'Proposal' : 'Estimate'}
-                      </p>
-                      <p className="text-xs text-blue-700 mt-0.5">
-                        {proposalMeta?.sent_at
-                          ? `Sent ${new Date(proposalMeta.sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                          : 'Not sent yet'}
-                        {' · '}
-                        {proposalMeta?.viewed_at
-                          ? `Opened ${new Date(proposalMeta.viewed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                          : 'Not opened yet'}
-                      </p>
-                    </div>
-                    <button
-                      onClick={openSend}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors flex-shrink-0"
-                    >
-                      <Send className="h-3.5 w-3.5" /> {proposalMeta?.sent_at ? 'Change / Resend' : 'Send to Customer'}
-                    </button>
-                    {proposalMeta && (
-                      <button
-                        onClick={() => window.open(`${customerEstimateLink(proposalMeta.public_token)}?preview=1`, '_blank', 'noopener')}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-blue-700 text-xs font-semibold rounded-lg border border-blue-300 hover:bg-blue-50 transition-colors flex-shrink-0"
-                      >
-                        <Eye className="h-3.5 w-3.5" /> Preview
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-bold text-gray-900">Line Items</h3>
-                      <p className="text-xs text-gray-500 mt-0.5">Drag rows to reorder. Save when done.</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setShowCatalog(c => !c)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${showCatalog ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                      >
-                        <ShoppingBag className="h-3.5 w-3.5" />
-                        Browse Catalog
-                      </button>
-                      <button
-                        onClick={handleSaveProposal}
-                        disabled={proposalSaving}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                      >
-                        <Save className="h-3.5 w-3.5" />
-                        {proposalSaving ? 'Saving…' : 'Save Changes'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {showCatalog && (
-                    <div className="border border-blue-200 rounded-xl overflow-hidden bg-blue-50/30">
-                      <div className="px-4 pt-4 pb-3 border-b border-blue-100 space-y-2">
-                        <p className="text-xs font-semibold text-blue-800 uppercase tracking-wider">Product Catalog</p>
-                        <div className="flex gap-2">
-                          <div className="relative flex-1">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                            <input
-                              type="text"
-                              placeholder="Search by name or SKU…"
-                              value={catalogSearch}
-                              onChange={e => setCatalogSearch(e.target.value)}
-                              className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            />
-                          </div>
-                          <select
-                            value={catalogCategory}
-                            onChange={e => setCatalogCategory(e.target.value)}
-                            className="border border-gray-300 rounded-lg px-2 py-2 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          >
-                            <option value="">All Categories</option>
-                            {catalogCategories.map(c => (
-                              <option key={c} value={c}>{c}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="max-h-56 overflow-y-auto divide-y divide-blue-100">
-                        {catalogLoading ? (
-                          <div className="p-4 text-center text-xs text-gray-400">Loading products…</div>
-                        ) : filteredCatalogProducts.length === 0 ? (
-                          <div className="p-4 text-center text-xs text-gray-400">No products found</div>
-                        ) : (
-                          filteredCatalogProducts.map(product => (
-                            <button
-                              key={product.id}
-                              onClick={() => addProductFromCatalog(product)}
-                              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-blue-100/60 text-left transition-colors group"
-                            >
-                              <div className="w-8 h-8 rounded-lg bg-white border border-blue-100 flex items-center justify-center shrink-0 overflow-hidden">
-                                {product.image_url ? (
-                                  <img src={product.image_url} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                  <ShoppingBag className="h-4 w-4 text-blue-300" />
-                                )}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-semibold text-gray-900 truncate">{product.name}</p>
-                                <p className="text-xs text-gray-400">{product.sku} · {product.category}</p>
-                              </div>
-                              <div className="text-right shrink-0">
-                                <p className="text-xs font-bold text-gray-900">${product.price.toFixed(2)}</p>
-                                <p className="text-xs text-gray-400">cost ${product.cost.toFixed(2)}</p>
-                              </div>
-                              <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Plus className="h-4 w-4 text-blue-600" />
-                              </div>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-gray-50 border-b border-gray-100">
-                          <th className="w-6 px-2" />
-                          <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Description</th>
-                          <th className="text-center px-2 py-2 text-xs font-semibold text-gray-500 w-14">Qty</th>
-                          <th className="text-right px-2 py-2 text-xs font-semibold text-gray-500 w-20">Cost</th>
-                          <th className="text-right px-2 py-2 text-xs font-semibold text-gray-500 w-20">Price</th>
-                          <th className="text-right px-2 py-2 text-xs font-semibold text-gray-500 w-14">Margin</th>
-                          <th className="w-8" />
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {lineItems.map(item => {
-                          const lineTotal = Number(item.quantity) * Number(item.unit_price);
-                          const lineCost = Number(item.quantity) * Number(item.unit_cost);
-                          const lineMargin = lineTotal > 0 ? ((lineTotal - lineCost) / lineTotal) * 100 : 0;
-                          return (
-                            <tr
-                              key={item.id}
-                              draggable
-                              onDragStart={e => handleItemDragStart(e, item.id)}
-                              onDragOver={e => { e.preventDefault(); setDragOverItemId(item.id); }}
-                              onDrop={e => handleItemDrop(e, item.id)}
-                              onDragEnd={() => { setDragSourceItemId(null); setDragOverItemId(null); }}
-                              className={`transition-colors ${dragOverItemId === item.id ? 'bg-blue-50' : 'hover:bg-gray-50/50'}`}
-                            >
-                              <td className="px-2 py-1.5 text-gray-300 cursor-grab">
-                                <GripVertical className="h-4 w-4" />
-                              </td>
-                              <td className="px-3 py-1.5">
-                                <input
-                                  type="text"
-                                  value={item.description}
-                                  onChange={e => updateLineItem(item.id, { description: e.target.value })}
-                                  className="w-full border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-0.5"
-                                  placeholder="Description…"
-                                />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  step={1}
-                                  value={item.quantity}
-                                  onChange={e => updateLineItem(item.id, { quantity: Number(e.target.value) })}
-                                  className="w-14 border border-gray-200 rounded px-1.5 py-0.5 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <div className="flex items-center justify-end gap-0.5">
-                                  <span className="text-gray-400 text-xs">$</span>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    step={0.01}
-                                    value={item.unit_cost}
-                                    onChange={e => updateLineItem(item.id, { unit_cost: Number(e.target.value) })}
-                                    className="w-16 border border-gray-200 rounded px-1.5 py-0.5 text-sm text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                  />
-                                </div>
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <div className="flex items-center justify-end gap-0.5">
-                                  <span className="text-gray-400 text-xs">$</span>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    step={0.01}
-                                    value={item.unit_price}
-                                    onChange={e => updateLineItem(item.id, { unit_price: Number(e.target.value) })}
-                                    className="w-16 border border-gray-200 rounded px-1.5 py-0.5 text-sm text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                  />
-                                </div>
-                              </td>
-                              <td className="px-2 py-1.5 text-right">
-                                <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${lineMargin >= 30 ? 'bg-emerald-50 text-emerald-700' : lineMargin >= 15 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>
-                                  {lineTotal > 0 ? `${lineMargin.toFixed(0)}%` : '—'}
-                                </span>
-                              </td>
-                              <td className="px-2 py-1.5">
-                                <button onClick={() => removeLineItem(item.id)} className="text-gray-300 hover:text-red-500 transition-colors">
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-
-                    <div className="px-4 py-3 border-t border-gray-100 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <button
-                          onClick={addLineItem}
-                          className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
-                        >
-                          <Plus className="h-3.5 w-3.5" /> Custom Line Item
-                        </button>
-                      </div>
-                      <div className="flex items-center justify-between pt-1 border-t border-gray-50">
-                        <div className="flex items-center gap-3 text-xs text-gray-500">
-                          <span>Cost: <strong className="text-gray-700">${proposalCost.toFixed(2)}</strong></span>
-                          <span className={`font-semibold px-1.5 py-0.5 rounded ${proposalMargin >= 30 ? 'bg-emerald-50 text-emerald-700' : proposalMargin >= 15 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-600'}`}>
-                            {proposalTotal > 0 ? `${proposalMargin.toFixed(1)}% margin` : '—'}
-                          </span>
-                        </div>
-                        <div className="text-sm font-bold text-gray-900">
-                          Total: ${proposalTotal.toFixed(2)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Scope of Work / Notes</label>
-                    <textarea
-                      rows={4}
-                      value={notes}
-                      onChange={e => setNotes(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                      placeholder="Describe the work to be performed…"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Terms & Conditions</label>
-                    <textarea
-                      rows={5}
-                      value={terms}
-                      onChange={e => setTerms(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                      placeholder="Payment terms, warranty, cancellation policy…"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
           {activeTab === 'accounting' && (
             <DealAccountingTab
               dealId={deal.id}
               onSaveCommission={(amount, payrollDate) => onUpdate(deal.id, { commission_amount: amount, commission_payroll_date: payrollDate })}
               onOpenInvoice={onOpenInvoice}
               onOpenWorkOrder={onOpenWorkOrder ?? (() => setActiveTab('work_orders'))}
+              onOpenEstimate={setEditingEstimateId}
+              refreshKey={accountingRefresh}
             />
           )}
 
@@ -1116,6 +664,8 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
                   </button>
                 </div>
               </div>
+
+              <DealInstallPanel installStatus={deal.install_status} workOrders={workOrders} />
 
               {workOrdersLoading ? (
                 <div className="text-center py-12 text-gray-400 text-sm">Loading work orders...</div>
@@ -1470,6 +1020,16 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
           prefilledWorkOrderType="installation"
         />
       )}
+
+      <EstimatePanel
+        estimateId={editingEstimateId}
+        creating={false}
+        onClose={() => setEditingEstimateId(null)}
+        onCreateDone={() => {}}
+        onOpenEstimate={setEditingEstimateId}
+        onChanged={handleEstimateChanged}
+        onOpenInvoice={onOpenInvoice}
+      />
 
       {showCreateProject && deal && (
         <NewProjectModal

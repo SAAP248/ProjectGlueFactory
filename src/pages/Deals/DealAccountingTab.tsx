@@ -11,6 +11,8 @@ interface Props {
   onSaveCommission: (amount: number, payrollDate: string | null) => Promise<boolean>;
   onOpenInvoice?: (invoiceId: string) => void;
   onOpenWorkOrder?: (workOrderId: string) => void;
+  onOpenEstimate?: (estimateId: string) => void;
+  refreshKey?: number;
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -289,8 +291,12 @@ function ProductsSection({ a }: { a: DealAccounting }) {
   );
 }
 
-export default function DealAccountingTab({ dealId, onSaveCommission, onOpenInvoice, onOpenWorkOrder }: Props) {
+export default function DealAccountingTab({ dealId, onSaveCommission, onOpenInvoice, onOpenWorkOrder, onOpenEstimate, refreshKey }: Props) {
   const { data: a, loading, error, refetch } = useDealAccounting(dealId);
+
+  useEffect(() => {
+    if (refreshKey) refetch();
+  }, [refreshKey, refetch]);
 
   if (loading && !a) {
     return <div className="flex justify-center py-16"><div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-600 border-t-transparent" /></div>;
@@ -323,12 +329,16 @@ export default function DealAccountingTab({ dealId, onSaveCommission, onOpenInvo
         {a.estimates.length === 0 ? <Empty text="No estimates on this deal." /> : (
           <div className="divide-y divide-gray-100">
             {a.estimates.map(e => (
-              <div key={e.id} className="px-5 py-2.5 flex items-center gap-3 text-sm">
+              <button
+                key={e.id} onClick={() => onOpenEstimate?.(e.id)} disabled={!onOpenEstimate}
+                className="w-full text-left px-5 py-2.5 flex items-center gap-3 text-sm hover:bg-blue-50/50 disabled:hover:bg-transparent transition-colors group"
+              >
                 <span className="font-mono text-xs text-gray-500 w-24 shrink-0">{e.estimate_number}</span>
                 <StatusPill status={e.status} />
                 <span className="text-xs text-gray-500 flex-1">{formatShortDate(e.estimate_date)}</span>
                 <span className="font-semibold text-gray-900">{formatMoney(e.total)}</span>
-              </div>
+                {onOpenEstimate && <ExternalLink className="h-3.5 w-3.5 text-gray-300 group-hover:text-blue-600 transition-colors" />}
+              </button>
             ))}
           </div>
         )}
