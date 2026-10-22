@@ -125,6 +125,7 @@ function App() {
             onBack={() => setCurrentPage('customers')}
             onViewCustomer={navigateToCustomer}
             onOpenInvoice={openInvoice}
+            onOpenWorkOrder={openWorkOrder}
           />
         );
       case 'chat':

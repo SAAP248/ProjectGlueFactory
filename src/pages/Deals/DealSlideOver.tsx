@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  X, MessageSquare, CheckSquare, Plus, Clock, CreditCard as Edit3, Save,
+  X, MessageSquare, CheckSquare, Plus, CreditCard as Edit3, Save,
   AlertCircle, Send, FileText, User,
-  Wrench, FolderKanban, Calendar, ChevronDown, ChevronUp, Timer, Navigation,
+  Wrench, FolderKanban, Calendar, ChevronDown, ChevronUp, ChevronRight,
 } from 'lucide-react';
 import type { Deal, Employee, StatusField } from './types';
 import { useDealActivities } from './useDeals';
@@ -22,10 +22,7 @@ import WorkOrderModal from '../WorkOrders/WorkOrderModal';
 import SendToCustomerModal from '../Estimates/SendToCustomerModal';
 import { createDealEstimate } from '../Estimates/useEstimates';
 import NewProjectModal from '../ProjectManagement/NewProjectModal';
-import SalesCallActions from './SalesCallActions';
 import { useDealTimeTracker } from '../../lib/useDealTimeTracker';
-import type { SalesCallStatus } from '../../lib/dealLifecycle';
-import { getDealTimeEntries, calculateSalesCallDuration } from '../../lib/dealLifecycle';
 
 interface Props {
   deal: Deal | null;
@@ -64,7 +61,7 @@ function formFromDeal(deal: Deal): Partial<Deal> {
   };
 }
 
-type ActiveTab = 'details' | 'work_orders' | 'accounting' | 'activity' | 'tasks' | 'time';
+type ActiveTab = 'details' | 'work_orders' | 'accounting' | 'activity' | 'tasks';
 
 function useProposal(dealId: string | null) {
   const [proposal, setProposal] = useState<DealProposal | null>(null);
@@ -114,7 +111,7 @@ function useDealWorkOrders(dealId: string | null) {
       .select('id, wo_number, title, status, billing_status, priority, work_order_type, scheduled_date, assigned_to, assigned_employee:employees!work_orders_assigned_to_fkey(first_name, last_name)')
       .eq('deal_id', dealId)
       .order('created_at', { ascending: false });
-    setWorkOrders((data ?? []) as DealWorkOrder[]);
+    setWorkOrders((data ?? []) as unknown as DealWorkOrder[]);
     setLoading(false);
   }, [dealId]);
 
@@ -124,6 +121,11 @@ function useDealWorkOrders(dealId: string | null) {
 }
 
 export default function DealSlideOver({ deal, employees, onClose, onUpdate, onStatusChange, onDealsChanged, onViewCustomer, onOpenInvoice, onOpenWorkOrder }: Props) {
+  const openWorkOrder = (id: string) => {
+    if (!onOpenWorkOrder) return;
+    onClose();
+    onOpenWorkOrder(id);
+  };
   const [activeTab, setActiveTab] = useState<ActiveTab>('details');
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Partial<Deal>>({});
@@ -146,9 +148,6 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [termsExpanded, setTermsExpanded] = useState(false);
 
-  // Sales call and time tracking
-  const [salesCallStatus, setSalesCallStatus] = useState<SalesCallStatus>('none');
-  const [timeEntries, setTimeEntries] = useState<Array<{ entry_type: string; recorded_at: string; notes?: string; employees?: { first_name: string; last_name: string } }>>([]);
   const [currentEmployeeId, setCurrentEmployeeId] = useState('');
 
   // Passive time tracking hook
@@ -165,21 +164,8 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
   }, []);
 
   useEffect(() => {
-    if (deal) {
-      setSalesCallStatus((deal as any).sales_call_status || 'none');
-      loadTimeEntries();
-    }
-  }, [deal?.id]);
-
-  useEffect(() => {
     trackTabChange(activeTab);
   }, [activeTab, trackTabChange]);
-
-  async function loadTimeEntries() {
-    if (!deal?.id) return;
-    const entries = await getDealTimeEntries(deal.id);
-    setTimeEntries(entries);
-  }
 
   useEffect(() => {
     if (deal) {
@@ -359,7 +345,6 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
     { key: 'details', label: 'Details' },
     { key: 'work_orders', label: 'Work Orders', count: workOrders.length },
     { key: 'accounting', label: 'Accounting' },
-    { key: 'time', label: 'Time' },
     { key: 'activity', label: 'Activity', count: activities.length },
     { key: 'tasks', label: 'Tasks', count: tasks.filter(t => !t.is_done).length },
   ];
@@ -637,7 +622,7 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
               dealId={deal.id}
               onSaveCommission={(amount, payrollDate) => onUpdate(deal.id, { commission_amount: amount, commission_payroll_date: payrollDate })}
               onOpenInvoice={onOpenInvoice}
-              onOpenWorkOrder={onOpenWorkOrder ?? (() => setActiveTab('work_orders'))}
+              onOpenWorkOrder={onOpenWorkOrder ? openWorkOrder : undefined}
               onOpenEstimate={setEditingEstimateId}
               refreshKey={accountingRefresh}
             />
@@ -680,11 +665,15 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
                   {workOrders.map(wo => {
                     const statusColor = getWorkOrderStatusColor(wo.status, wo.billing_status);
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={wo.id}
-                        className={`rounded-xl border-l-4 ${statusColor.border} ${statusColor.bg} border border-gray-200 p-4 transition-all hover:shadow-sm`}
+                        onClick={() => openWorkOrder(wo.id)}
+                        disabled={!onOpenWorkOrder}
+                        title="Open work order"
+                        className={`group w-full text-left rounded-xl border-l-4 ${statusColor.border} ${statusColor.bg} border border-gray-200 p-4 transition-all enabled:hover:shadow-md enabled:hover:-translate-y-px enabled:hover:border-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-default`}
                       >
-                        <div className="flex items-start justify-between">
+                        <div className="flex items-center justify-between gap-3">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-mono text-gray-400">{wo.wo_number}</span>
@@ -715,8 +704,14 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
                               )}
                             </div>
                           </div>
+                          {onOpenWorkOrder && (
+                            <span className="flex items-center gap-1 text-xs font-medium text-gray-400 group-hover:text-blue-600 transition-colors flex-shrink-0">
+                              Open
+                              <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                            </span>
+                          )}
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -834,117 +829,6 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
             </div>
           )}
 
-          {activeTab === 'time' && (
-            <div className="p-6 space-y-6">
-              {/* Sales Call Lifecycle */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <Navigation className="h-4 w-4 text-blue-600" />
-                  Sales Call Tracking
-                </h3>
-                {deal && currentEmployeeId && (
-                  <SalesCallActions
-                    dealId={deal.id}
-                    employeeId={currentEmployeeId}
-                    currentStatus={salesCallStatus}
-                    onChanged={(status) => {
-                      setSalesCallStatus(status);
-                      loadTimeEntries();
-                      trackAction('sales_call_action', `Status changed to: ${status}`);
-                    }}
-                  />
-                )}
-              </div>
-
-              {/* Time Summary */}
-              {timeEntries.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                    <Timer className="h-4 w-4 text-emerald-600" />
-                    Time Summary
-                  </h3>
-                  {(() => {
-                    const dur = calculateSalesCallDuration(timeEntries);
-                    return (
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-center">
-                          <p className="text-xs font-medium text-blue-600">Drive Time</p>
-                          <p className="text-lg font-bold text-blue-900">{dur.driveMinutes}m</p>
-                        </div>
-                        <div className="p-3 bg-teal-50 border border-teal-100 rounded-xl text-center">
-                          <p className="text-xs font-medium text-teal-600">On Site</p>
-                          <p className="text-lg font-bold text-teal-900">{dur.onsiteMinutes}m</p>
-                        </div>
-                        <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-center">
-                          <p className="text-xs font-medium text-gray-600">Total</p>
-                          <p className="text-lg font-bold text-gray-900">{dur.totalMinutes}m</p>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-
-              {/* Time Entry Timeline */}
-              {timeEntries.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Event Log</h3>
-                  <div className="space-y-2">
-                    {timeEntries.map((entry: any, idx: number) => {
-                      const entryTypeLabels: Record<string, string> = {
-                        enroute: 'Started Driving',
-                        arrived: 'Arrived On Site',
-                        work_start: 'Started Working',
-                        pause: 'Paused',
-                        resume: 'Resumed',
-                        complete: 'Completed',
-                        cancelled: 'Cancelled',
-                      };
-                      const entryColors: Record<string, string> = {
-                        enroute: 'bg-blue-500',
-                        arrived: 'bg-teal-500',
-                        work_start: 'bg-emerald-500',
-                        pause: 'bg-amber-500',
-                        resume: 'bg-emerald-500',
-                        complete: 'bg-green-500',
-                        cancelled: 'bg-red-500',
-                      };
-                      return (
-                        <div key={entry.id || idx} className="flex items-start gap-3">
-                          <div className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${entryColors[entry.entry_type] || 'bg-gray-400'}`} />
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-800">
-                              {entryTypeLabels[entry.entry_type] || entry.entry_type}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {new Date(entry.recorded_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                              {entry.employees && ` · ${entry.employees.first_name} ${entry.employees.last_name}`}
-                            </p>
-                            {entry.notes && <p className="text-xs text-gray-600 mt-0.5">{entry.notes}</p>}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {timeEntries.length === 0 && salesCallStatus === 'none' && (
-                <div className="text-center py-12 text-gray-400">
-                  <Clock className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                  <p className="text-sm">No time tracked yet</p>
-                  <p className="text-xs mt-1">Use the buttons above to start tracking a sales call</p>
-                </div>
-              )}
-
-              {/* Passive Tracking Info */}
-              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                <p className="text-xs text-gray-500">
-                  <span className="font-semibold">Auto-tracking:</span> Time spent viewing and editing this deal is being logged automatically for payroll analysis.
-                </p>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 

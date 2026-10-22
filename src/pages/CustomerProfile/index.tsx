@@ -28,6 +28,7 @@ interface Props {
   onBack: () => void;
   onViewCustomer: (id: string) => void;
   onOpenInvoice?: (invoiceId: string) => void;
+  onOpenWorkOrder?: (workOrderId: string) => void;
 }
 
 interface ParentSummary {
@@ -52,7 +53,7 @@ const tagColor = (tag: string) => {
   return 'bg-gray-100 text-gray-600';
 };
 
-export default function CustomerProfile({ customerId, onBack, onViewCustomer, onOpenInvoice }: Props) {
+export default function CustomerProfile({ customerId, onBack, onViewCustomer, onOpenInvoice, onOpenWorkOrder }: Props) {
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
 
@@ -476,7 +477,7 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
           />
         )}
         {activeTab === 'deals' && (
-          <DealsTab companyId={company.id} />
+          <DealsTab companyId={company.id} onOpenWorkOrder={onOpenWorkOrder} />
         )}
         {activeTab === 'sites-systems' && (
           <SitesSystemsTab

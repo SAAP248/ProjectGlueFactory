@@ -5,6 +5,36 @@ import { getStatusGroup } from './types';
 
 const DEAL_SELECT = '*, companies(name, phone, email), sites(id, name, address, city, state, zip), assigned_employee:employees!deals_assigned_employee_id_fkey(first_name, last_name)';
 
+export async function changeDealStatus(
+  dealId: string,
+  field: StatusField,
+  newValue: string | null,
+  oldValue: string | null,
+  extra: { reason?: string; updates?: Partial<Deal> } = {}
+): Promise<Deal | null> {
+  const { data, error } = await supabase
+    .from('deals')
+    .update({ ...extra.updates, [field]: newValue, updated_at: new Date().toISOString() })
+    .eq('id', dealId)
+    .select(DEAL_SELECT)
+    .maybeSingle();
+  if (error || !data) return null;
+
+  const label = getStatusGroup(field).label;
+  const change = oldValue
+    ? `${label} status changed from "${oldValue}" to "${newValue ?? 'empty'}"`
+    : `${label} status set to "${newValue}"`;
+  await supabase.from('deal_activities').insert({
+    deal_id: dealId,
+    activity_type: 'stage_change',
+    description: extra.reason ? `${change}. Reason: ${extra.reason}` : change,
+    old_value: oldValue,
+    new_value: newValue,
+    status_field: field,
+  });
+  return data as unknown as Deal;
+}
+
 export function useDeals() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -41,28 +71,9 @@ export function useDeals() {
     oldValue: string | null,
     extra: { reason?: string; updates?: Partial<Deal> } = {}
   ): Promise<Deal | null> => {
-    const { data, error } = await supabase
-      .from('deals')
-      .update({ ...extra.updates, [field]: newValue, updated_at: new Date().toISOString() })
-      .eq('id', dealId)
-      .select(DEAL_SELECT)
-      .maybeSingle();
-    if (error || !data) return null;
-    replaceDeal(data as unknown as Deal);
-
-    const label = getStatusGroup(field).label;
-    const change = oldValue
-      ? `${label} status changed from "${oldValue}" to "${newValue ?? 'empty'}"`
-      : `${label} status set to "${newValue}"`;
-    await supabase.from('deal_activities').insert({
-      deal_id: dealId,
-      activity_type: 'stage_change',
-      description: extra.reason ? `${change}. Reason: ${extra.reason}` : change,
-      old_value: oldValue,
-      new_value: newValue,
-      status_field: field,
-    });
-    return data as unknown as Deal;
+    const fresh = await changeDealStatus(dealId, field, newValue, oldValue, extra);
+    if (fresh) replaceDeal(fresh);
+    return fresh;
   }, [replaceDeal]);
 
   const updateDeal = useCallback(async (dealId: string, updates: Partial<Deal>) => {

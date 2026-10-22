@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { TrendingUp, DollarSign, Repeat, Calendar, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import DealSlideOver from '../Deals/DealSlideOver';
-import type { Deal as FullDeal, Employee } from '../Deals/types';
+import { changeDealStatus } from '../Deals/useDeals';
+import type { Deal as FullDeal, Employee, StatusField } from '../Deals/types';
 
 interface DealRow {
   id: string;
@@ -17,6 +18,7 @@ interface DealRow {
 
 interface Props {
   companyId: string;
+  onOpenWorkOrder?: (workOrderId: string) => void;
 }
 
 const STAGE_STYLES: Record<string, { bg: string; text: string }> = {
@@ -47,7 +49,7 @@ function formatDate(d: string | null | undefined) {
 
 type SortKey = 'title' | 'sales_stage' | 'value' | 'rmr' | 'created_at';
 
-export default function DealsTab({ companyId }: Props) {
+export default function DealsTab({ companyId, onOpenWorkOrder }: Props) {
   const [deals, setDeals] = useState<DealRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
@@ -132,6 +134,26 @@ export default function DealsTab({ companyId }: Props) {
     }
     return !error;
   }, [companyId]);
+
+  const handleStatusChange = useCallback(async (
+    dealId: string,
+    field: StatusField,
+    newValue: string | null,
+    oldValue: string | null,
+    extra?: { reason?: string; updates?: Partial<FullDeal> }
+  ) => {
+    const fresh = await changeDealStatus(dealId, field, newValue, oldValue, extra);
+    if (fresh) {
+      setSelectedDeal(fresh);
+      loadDeals();
+    }
+    return fresh;
+  }, [companyId]);
+
+  async function refreshSelectedDeal() {
+    if (selectedDeal) await openDeal(selectedDeal.id);
+    await loadDeals();
+  }
 
   function handleCloseSlideOver() {
     setSelectedDeal(null);
@@ -337,6 +359,9 @@ export default function DealsTab({ companyId }: Props) {
           employees={employees}
           onClose={handleCloseSlideOver}
           onUpdate={handleUpdateDeal}
+          onStatusChange={handleStatusChange}
+          onDealsChanged={refreshSelectedDeal}
+          onOpenWorkOrder={onOpenWorkOrder}
         />
       )}
     </div>
