@@ -12,6 +12,7 @@ interface Props {
   onBack: () => void;
   onEdit: (id: string) => void;
   onAddInspection?: (workOrderId: string) => void;
+  onOpenDeal?: (dealId: string) => void;
 }
 
 interface LinkedInspection {
@@ -116,7 +117,7 @@ function formatDateTime(ts: string | null): string {
   });
 }
 
-export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInspection }: Props) {
+export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInspection, onOpenDeal }: Props) {
   const [activeTab, setActiveTab] = useState('summary');
   const [wo, setWo] = useState<WorkOrder | null>(null);
   const [lineItems, setLineItems] = useState<WorkOrderLineItem[]>([]);
@@ -579,10 +580,14 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
                       </div>
                     )}
                     {(wo as any).deal_id && (
-                      <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg border border-blue-200">
+                      <button
+                        onClick={() => onOpenDeal?.((wo as any).deal_id)}
+                        disabled={!onOpenDeal}
+                        className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors disabled:hover:bg-blue-50"
+                      >
                         <Briefcase className="h-4 w-4 text-blue-600" />
                         <span className="text-sm font-medium text-blue-700">Linked to Deal</span>
-                      </div>
+                      </button>
                     )}
                     {(wo as any).go_back_work_order_id && (
                       <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 rounded-lg border border-orange-200">
@@ -868,6 +873,7 @@ export default function WorkOrderDetail({ workOrderId, onBack, onEdit, onAddInsp
             lineItems={lineItems}
             onPaymentRecorded={loadData}
             onLineItemsChanged={loadData}
+            onOpenDeal={onOpenDeal}
           />
         )}
 

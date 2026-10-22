@@ -303,7 +303,7 @@ export default function EmployeeModal({ employee, canViewCompensation, onClose, 
                 {form.pay_type === 'hourly' && (
                   <InputField label="Overtime Rate ($/hr)" value={form.overtime_rate} onChange={v => update('overtime_rate', v)} type="number" />
                 )}
-                <InputField label="Loaded Cost ($/hr)" value={form.loaded_cost} onChange={v => update('loaded_cost', v)} type="number" />
+                <InputField label="Burdened Cost ($/hr)" value={form.loaded_cost} onChange={v => update('loaded_cost', v)} type="number" />
                 <InputField label="Bill Rate / Hourly Rate ($/hr)" value={form.hourly_rate} onChange={v => update('hourly_rate', v)} type="number" />
                 <SelectField
                   label="Default Billing Product"

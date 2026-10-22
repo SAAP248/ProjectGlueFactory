@@ -216,7 +216,7 @@ export default function EmployeeDetail({ employee, canViewCompensation, onEdit, 
               {employee.pay_type === 'hourly' && (
                 <Field label="Overtime Rate" value={employee.overtime_rate ? formatCurrency(employee.overtime_rate) + '/hr' : '--'} />
               )}
-              <Field label="Loaded Cost" value={employee.loaded_cost ? formatCurrency(employee.loaded_cost) + '/hr' : '--'} />
+              <Field label="Burdened Cost" value={employee.loaded_cost ? formatCurrency(employee.loaded_cost) + '/hr' : '--'} />
             </Section>
             <Section title="Billing Defaults">
               <Field label="Default Billing Product" value={defaultProduct ? `${defaultProduct.name} (${defaultProduct.sku})` : 'Not assigned'} />

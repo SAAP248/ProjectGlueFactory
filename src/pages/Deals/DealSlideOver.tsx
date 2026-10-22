@@ -13,6 +13,7 @@ import {
 import DealCustomerHeader from './DealCustomerHeader';
 import DealStatusCards from './DealStatusCards';
 import DealStory from './DealStory';
+import DealAccountingTab from './DealAccountingTab';
 import type { NextStep, StoryLink } from './useDealStory';
 import WorkOrderModal from '../WorkOrders/WorkOrderModal';
 import SendToCustomerModal from '../Estimates/SendToCustomerModal';
@@ -68,6 +69,7 @@ interface Props {
   onDealsChanged: () => Promise<void> | void;
   onViewCustomer?: (companyId: string) => void;
   onOpenInvoice?: (invoiceId: string) => void;
+  onOpenWorkOrder?: (workOrderId: string) => void;
 }
 
 interface UndoToast {
@@ -89,7 +91,7 @@ function formFromDeal(deal: Deal): Partial<Deal> {
   };
 }
 
-type ActiveTab = 'details' | 'proposal' | 'work_orders' | 'activity' | 'tasks' | 'time';
+type ActiveTab = 'details' | 'proposal' | 'work_orders' | 'accounting' | 'activity' | 'tasks' | 'time';
 
 interface LineItem {
   id: string;
@@ -196,7 +198,7 @@ function useDealWorkOrders(dealId: string | null) {
   return { workOrders, loading, refetch: fetch };
 }
 
-export default function DealSlideOver({ deal, employees, onClose, onUpdate, onStatusChange, onDealsChanged, onViewCustomer, onOpenInvoice }: Props) {
+export default function DealSlideOver({ deal, employees, onClose, onUpdate, onStatusChange, onDealsChanged, onViewCustomer, onOpenInvoice, onOpenWorkOrder }: Props) {
   const [activeTab, setActiveTab] = useState<ActiveTab>('details');
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Partial<Deal>>({});
@@ -535,6 +537,7 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
     { key: 'details', label: 'Details' },
     { key: 'proposal', label: 'Proposal' },
     { key: 'work_orders', label: 'Work Orders', count: workOrders.length },
+    { key: 'accounting', label: 'Accounting' },
     { key: 'time', label: 'Time' },
     { key: 'activity', label: 'Activity', count: activities.length },
     { key: 'tasks', label: 'Tasks', count: tasks.filter(t => !t.is_done).length },
@@ -1081,6 +1084,15 @@ export default function DealSlideOver({ deal, employees, onClose, onUpdate, onSt
                 </>
               )}
             </div>
+          )}
+
+          {activeTab === 'accounting' && (
+            <DealAccountingTab
+              dealId={deal.id}
+              onSaveCommission={(amount, payrollDate) => onUpdate(deal.id, { commission_amount: amount, commission_payroll_date: payrollDate })}
+              onOpenInvoice={onOpenInvoice}
+              onOpenWorkOrder={onOpenWorkOrder ?? (() => setActiveTab('work_orders'))}
+            />
           )}
 
           {activeTab === 'work_orders' && (

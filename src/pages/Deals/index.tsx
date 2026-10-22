@@ -17,18 +17,20 @@ import {
 } from './types';
 
 interface DealsProps {
+  initialDealId?: string | null;
   onViewCustomer?: (companyId: string) => void;
   onOpenInvoice?: (invoiceId: string) => void;
+  onOpenWorkOrder?: (workOrderId: string) => void;
 }
 
-export default function Deals({ onViewCustomer, onOpenInvoice }: DealsProps) {
+export default function Deals({ initialDealId, onViewCustomer, onOpenInvoice, onOpenWorkOrder }: DealsProps) {
   const { deals, employees, loading, updateDealStage, updateDeal, refetch } = useDeals();
 
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [pipelineFilter, setPipelineFilter] = useState<PipelineFilter>('sales');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'value' | 'date' | 'company'>('value');
-  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+  const [selectedDealId, setSelectedDealId] = useState<string | null>(initialDealId ?? null);
   const selectedDeal = useMemo(() => deals.find(d => d.id === selectedDealId) ?? null, [deals, selectedDealId]);
   const setSelectedDeal = (deal: Deal | null) => setSelectedDealId(deal?.id ?? null);
   const [showNewDeal, setShowNewDeal] = useState(false);
@@ -472,6 +474,7 @@ export default function Deals({ onViewCustomer, onOpenInvoice }: DealsProps) {
         onDealsChanged={refetch}
         onViewCustomer={onViewCustomer}
         onOpenInvoice={onOpenInvoice}
+        onOpenWorkOrder={onOpenWorkOrder}
       />
 
       {showNewDeal && (

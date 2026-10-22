@@ -8,6 +8,8 @@ export interface Deal {
   site_id: string | null;
   title: string;
   value: number;
+  commission_amount?: number;
+  commission_payroll_date?: string | null;
   probability: number;
   sales_stage: string;
   install_status: string | null;

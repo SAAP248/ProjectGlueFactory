@@ -51,6 +51,7 @@ function App() {
   const [pendingInvoiceId, setPendingInvoiceId] = useState<string | null>(null);
   const [pendingWorkOrderId, setPendingWorkOrderId] = useState<string | null>(null);
   const [pendingAgreementId, setPendingAgreementId] = useState<string | null>(null);
+  const [pendingDealId, setPendingDealId] = useState<string | null>(null);
   const [searchNavKey, setSearchNavKey] = useState(0);
 
   useEffect(() => {
@@ -68,6 +69,7 @@ function App() {
     setPendingInvoiceId(null);
     setPendingWorkOrderId(null);
     setPendingAgreementId(null);
+    setPendingDealId(null);
     setCurrentPage(page);
   }, []);
 
@@ -81,16 +83,24 @@ function App() {
     setCurrentPage('invoices');
   };
 
+  const openDeal = (dealId: string) => {
+    setSearchNavKey(k => k + 1);
+    setPendingDealId(dealId);
+    setCurrentPage('deals');
+  };
+
+  const openWorkOrder = (workOrderId: string) => {
+    setSearchNavKey(k => k + 1);
+    setPageFilter(undefined);
+    setPendingWorkOrderId(workOrderId);
+    setCurrentPage('work-orders');
+  };
+
   const openSearchRecord = (type: SearchRecordType, id: string) => {
     setSearchNavKey(k => k + 1);
     if (type === 'customer') { navigateToCustomer(id); return; }
     if (type === 'invoice') { openInvoice(id); return; }
-    if (type === 'work_order') {
-      setPageFilter(undefined);
-      setPendingWorkOrderId(id);
-      setCurrentPage('work-orders');
-      return;
-    }
+    if (type === 'work_order') { openWorkOrder(id); return; }
     setPendingAgreementId(id);
     setCurrentPage('service-plans');
   };
@@ -124,11 +134,11 @@ function App() {
       case 'leads':
         return <Leads />;
       case 'deals':
-        return <Deals onViewCustomer={navigateToCustomer} onOpenInvoice={openInvoice} />;
+        return <Deals key={`deals-${searchNavKey}`} initialDealId={pendingDealId} onViewCustomer={navigateToCustomer} onOpenInvoice={openInvoice} onOpenWorkOrder={openWorkOrder} />;
       case 'projects':
         return <ProjectManagement />;
       case 'work-orders':
-        return <WorkOrders key={`wo-${searchNavKey}`} initialFilter={pageFilter} initialWorkOrderId={pendingWorkOrderId} onNavigateToInspection={(inspId) => {
+        return <WorkOrders key={`wo-${searchNavKey}`} initialFilter={pageFilter} initialWorkOrderId={pendingWorkOrderId} onOpenDeal={openDeal} onNavigateToInspection={(inspId) => {
           setPendingInspectionId(inspId);
           setCurrentPage('inspections');
         }} />;
@@ -187,7 +197,7 @@ function App() {
     <div className="flex h-screen bg-gray-50">
       <Sidebar
         currentPage={currentPage}
-        setCurrentPage={(page: string) => { setPageFilter(undefined); setPendingInvoiceId(null); setPendingWorkOrderId(null); setPendingAgreementId(null); setCurrentPage(page); }}
+        setCurrentPage={(page: string) => { setPageFilter(undefined); setPendingInvoiceId(null); setPendingWorkOrderId(null); setPendingAgreementId(null); setPendingDealId(null); setCurrentPage(page); }}
         collapsed={sidebarCollapsed}
         setCollapsed={setSidebarCollapsed}
       />

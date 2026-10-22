@@ -10,9 +10,10 @@ interface Props {
   initialFilter?: string;
   initialWorkOrderId?: string | null;
   onNavigateToInspection?: (inspectionId: string) => void;
+  onOpenDeal?: (dealId: string) => void;
 }
 
-export default function WorkOrders({ initialFilter, initialWorkOrderId, onNavigateToInspection }: Props) {
+export default function WorkOrders({ initialFilter, initialWorkOrderId, onNavigateToInspection, onOpenDeal }: Props) {
   const [view, setView] = useState<View>(initialWorkOrderId ? { type: 'detail', id: initialWorkOrderId } : { type: 'list' });
   const [editId, setEditId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -50,6 +51,7 @@ export default function WorkOrders({ initialFilter, initialWorkOrderId, onNaviga
           onBack={handleBack}
           onEdit={handleEdit}
           onAddInspection={(woId) => setInspectionModalForWO(woId)}
+          onOpenDeal={onOpenDeal}
         />
       )}
 

@@ -7,6 +7,8 @@ import {
   MapPin, CheckCircle, Truck, Save
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { workedMinutes, laborCostFor, productCost } from '../../lib/jobCosting';
+import WorkOrderDealCard from './WorkOrderDealCard';
 
 interface Invoice {
   id: string;
@@ -45,6 +47,7 @@ interface TechEntry {
   completed_at: string | null;
   work_started_at: string | null;
   total_paused_minutes: number;
+  burdened_rate: number;
 }
 
 interface LineItem {
@@ -63,6 +66,7 @@ interface Props {
   lineItems: LineItem[];
   onPaymentRecorded: () => void;
   onLineItemsChanged: () => void;
+  onOpenDeal?: (dealId: string) => void;
 }
 
 const INVOICE_STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
@@ -109,7 +113,7 @@ function fmtDuration(mins: number | null): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-export default function WorkOrderAccountingTab({ workOrder: wo, lineItems, onPaymentRecorded, onLineItemsChanged }: Props) {
+export default function WorkOrderAccountingTab({ workOrder: wo, lineItems, onPaymentRecorded, onLineItemsChanged, onOpenDeal }: Props) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [techEntries, setTechEntries] = useState<TechEntry[]>([]);
@@ -143,7 +147,7 @@ export default function WorkOrderAccountingTab({ workOrder: wo, lineItems, onPay
         .limit(100),
       supabase
         .from('work_order_technicians')
-        .select('id, employee_id, is_lead, status, scheduled_date, enroute_at, onsite_at, completed_at, work_started_at, total_paused_minutes, employees(first_name, last_name)')
+        .select('id, employee_id, is_lead, status, scheduled_date, enroute_at, onsite_at, completed_at, work_started_at, total_paused_minutes, employees(first_name, last_name, loaded_cost)')
         .eq('work_order_id', wo.id)
         .order('scheduled_date', { ascending: true }),
     ]);
@@ -168,6 +172,7 @@ export default function WorkOrderAccountingTab({ workOrder: wo, lineItems, onPay
         completed_at: t.completed_at,
         work_started_at: t.work_started_at,
         total_paused_minutes: t.total_paused_minutes || 0,
+        burdened_rate: Number(t.employees?.loaded_cost) || 0,
       }))
     );
     setLoading(false);
@@ -225,11 +230,11 @@ export default function WorkOrderAccountingTab({ workOrder: wo, lineItems, onPay
   }
 
   const revenue = Number(wo.total_revenue) || 0;
-  const laborCost = Number(wo.total_labor_cost) || 0;
-  const partsCost = Number(wo.total_parts_cost) || 0;
+  const laborCost = techEntries.reduce((s, t) => s + laborCostFor(workedMinutes(t), t.burdened_rate), 0);
+  const partsCost = productCost(lineItems);
   const travelFee = Number(wo.travel_fee) || 0;
-  const profit = Number(wo.profit_amount) || 0;
-  const margin = Number(wo.profit_margin_pct) || 0;
+  const profit = revenue - laborCost - partsCost;
+  const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
   const totalInvoiced = invoices.reduce((s, i) => s + Number(i.total), 0);
   const totalPaid = invoices.reduce((s, i) => s + Number(i.amount_paid), 0);
   const totalBalanceDue = invoices.reduce((s, i) => s + Number(i.balance_due), 0);
@@ -241,10 +246,7 @@ export default function WorkOrderAccountingTab({ workOrder: wo, lineItems, onPay
   const partsMargin = partsTotalSell > 0 ? ((partsTotalSell - partsTotalCost) / partsTotalSell) * 100 : 0;
   const lineItemsTotal = lineItems.reduce((s, li) => s + Number(li.total_price), 0);
 
-  const totalLaborMins = techEntries.reduce((sum, t) => {
-    const onsite = diffMinutes(t.onsite_at, t.completed_at);
-    return sum + (onsite !== null ? Math.max(0, onsite - (t.total_paused_minutes || 0)) : 0);
-  }, 0);
+  const totalLaborMins = techEntries.reduce((sum, t) => sum + workedMinutes(t), 0);
 
   if (loading) {
     return (
@@ -256,6 +258,8 @@ export default function WorkOrderAccountingTab({ workOrder: wo, lineItems, onPay
 
   return (
     <div className="space-y-4 max-w-4xl">
+      {wo.deal_id && <WorkOrderDealCard dealId={wo.deal_id} onOpenDeal={onOpenDeal} />}
+
       {/* Profitability Overview */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -383,6 +387,14 @@ export default function WorkOrderAccountingTab({ workOrder: wo, lineItems, onPay
                             </span>
                           )}
                         </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-sm font-semibold text-gray-900">{fmt(laborCostFor(workedMinutes(tech), tech.burdened_rate))}</p>
+                        {tech.burdened_rate > 0 ? (
+                          <p className="text-[11px] text-gray-500">{(workedMinutes(tech) / 60).toFixed(2)} hrs × {fmt(tech.burdened_rate)}/hr</p>
+                        ) : (
+                          <p className="text-[11px] text-amber-700 flex items-center gap-1 justify-end"><AlertTriangle className="h-3 w-3" />No burdened cost set</p>
+                        )}
                       </div>
                       <button
                         onClick={() => openTimeEdit(tech)}
