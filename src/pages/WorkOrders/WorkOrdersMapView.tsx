@@ -22,6 +22,7 @@ interface WOPin {
 const TYPE_COLOR_MAP: Record<string, { color: string; label: string }> = {
   service:      { color: '#0d9488', label: 'Service' },
   service_call: { color: '#0d9488', label: 'Service Call' },
+  sales_call:   { color: '#0284c7', label: 'Sales Call' },
   installation: { color: '#2563eb', label: 'Installation' },
   inspection:   { color: '#7c3aed', label: 'Inspection' },
   maintenance:  { color: '#d97706', label: 'Maintenance' },

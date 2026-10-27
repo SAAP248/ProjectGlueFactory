@@ -5,7 +5,8 @@ import type { Lead, LeadStatus } from './types';
 import { LEAD_STATUS_CONFIG } from './types';
 import LeadFormModal from './LeadFormModal';
 import LeadSlideOver from './LeadSlideOver';
-import NewDealWizard from '../Deals/NewDealWizard';
+import ConvertedDealPrompt from './ConvertedDealPrompt';
+import { convertLeadToDeal } from './convertLeadToDeal';
 
 const STATUS_FILTERS: { value: LeadStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'All Leads' },
@@ -54,7 +55,12 @@ function StatCard({ label, value, icon: Icon, color, bg, onClick, active }: Stat
   );
 }
 
-export default function Leads() {
+interface LeadsProps {
+  onOpenDeal?: (dealId: string) => void;
+  onOpenWorkOrder?: (workOrderId: string) => void;
+}
+
+export default function Leads({ onOpenDeal, onOpenWorkOrder }: LeadsProps) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -62,7 +68,9 @@ export default function Leads() {
   const [showForm, setShowForm] = useState(false);
   const [editLead, setEditLead] = useState<Lead | null>(null);
   const [slideOverId, setSlideOverId] = useState<string | null>(null);
-  const [convertingLead, setConvertingLead] = useState<Lead | null>(null);
+  const [convertingId, setConvertingId] = useState<string | null>(null);
+  const [convertError, setConvertError] = useState('');
+  const [converted, setConverted] = useState<{ name: string; dealId: string; missing: string[] } | null>(null);
 
   const loadLeads = useCallback(async () => {
     setLoading(true);
@@ -111,9 +119,19 @@ export default function Leads() {
     setSlideOverId(lead.id);
   }
 
-  function handleConvertToDeal(lead: Lead) {
-    setSlideOverId(null);
-    setConvertingLead(lead);
+  async function handleConvertToDeal(lead: Lead) {
+    setConvertingId(lead.id);
+    setConvertError('');
+    try {
+      const result = await convertLeadToDeal(lead);
+      setSlideOverId(null);
+      setConverted({ name: lead.contact_name, ...result });
+      loadLeads();
+    } catch (err) {
+      setConvertError(err instanceof Error ? err.message : 'Could not convert this lead.');
+    } finally {
+      setConvertingId(null);
+    }
   }
 
   return (
@@ -317,21 +335,12 @@ export default function Leads() {
         />
       )}
 
-      {convertingLead && (
-        <NewDealWizard
-          leadPrefill={{
-            leadId: convertingLead.id,
-            contactName: convertingLead.contact_name,
-            contactPhone: convertingLead.contact_phone ?? undefined,
-            contactEmail: convertingLead.contact_email ?? undefined,
-            address: convertingLead.address ?? undefined,
-            city: convertingLead.city ?? undefined,
-            state: convertingLead.state ?? undefined,
-            zip: convertingLead.zip ?? undefined,
-            assignedEmployeeId: convertingLead.assigned_employee_id ?? undefined,
-          }}
-          onClose={() => setConvertingLead(null)}
-          onDealCreated={() => { setConvertingLead(null); loadLeads(); }}
+      {converted && (
+        <ConvertedDealPrompt
+          leadName={converted.name}
+          missing={converted.missing}
+          onOpenDeal={onOpenDeal ? () => onOpenDeal(converted.dealId) : undefined}
+          onClose={() => setConverted(null)}
         />
       )}
 
@@ -343,6 +352,10 @@ export default function Leads() {
             onClose={() => setSlideOverId(null)}
             onEdit={lead => { setSlideOverId(null); setEditLead(lead); setShowForm(true); }}
             onConvertToDeal={handleConvertToDeal}
+            converting={convertingId === slideOverId}
+            convertError={convertError}
+            onOpenDeal={onOpenDeal}
+            onOpenWorkOrder={onOpenWorkOrder}
             onUpdated={loadLeads}
           />
         </>

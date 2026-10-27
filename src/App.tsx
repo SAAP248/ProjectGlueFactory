@@ -133,7 +133,7 @@ function App() {
       case 'team-chat':
         return <TeamChat />;
       case 'leads':
-        return <Leads />;
+        return <Leads onOpenDeal={openDeal} onOpenWorkOrder={openWorkOrder} />;
       case 'deals':
         return <Deals key={`deals-${searchNavKey}`} initialDealId={pendingDealId} onViewCustomer={navigateToCustomer} onOpenInvoice={openInvoice} onOpenWorkOrder={openWorkOrder} />;
       case 'projects':

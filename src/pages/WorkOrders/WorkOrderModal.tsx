@@ -146,6 +146,7 @@ const WO_TYPES = [
   { value: 'maintenance', label: 'Maintenance' },
   { value: 'installation', label: 'Installation' },
   { value: 'project', label: 'Project' },
+  { value: 'sales_call', label: 'Sales Call' },
 ];
 
 const PRIORITIES = [

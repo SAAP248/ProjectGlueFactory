@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import {
   X, Phone, Mail, MapPin, Calendar, User, CheckCircle, XCircle, Clock,
   ArrowRight, ExternalLink, CreditCard as Edit2, ChevronRight, Shield,
-  Package, Camera, Plus, Trash2, Image, Check, ChevronDown, ChevronUp,
+  Package, Camera, Plus, Trash2, Image, Check, ChevronDown, ChevronUp, Briefcase,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import LeadSalesCalls from './LeadSalesCalls';
 import type { Lead, LeadActivityLog, LeadSystem, LeadLineItem, LeadPhoto } from './types';
 import { LEAD_STATUS_CONFIG } from './types';
 import * as LucideIcons from 'lucide-react';
@@ -42,10 +43,14 @@ interface Props {
   onClose: () => void;
   onEdit: (lead: Lead) => void;
   onConvertToDeal: (lead: Lead) => void;
+  converting: boolean;
+  convertError: string;
+  onOpenDeal?: (dealId: string) => void;
+  onOpenWorkOrder?: (workOrderId: string) => void;
   onUpdated: () => void;
 }
 
-type TabId = 'overview' | 'systems' | 'products' | 'photos';
+type TabId = 'overview' | 'calls' | 'systems' | 'products' | 'photos';
 
 function SystemIcon({ name, className }: { name: string; className?: string }) {
   const Icon = (LucideIcons as Record<string, React.ComponentType<{ className?: string }>>)[name];
@@ -72,7 +77,7 @@ function formatCurrency(n: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(n);
 }
 
-export default function LeadSlideOver({ leadId, onClose, onEdit, onConvertToDeal, onUpdated }: Props) {
+export default function LeadSlideOver({ leadId, onClose, onEdit, onConvertToDeal, converting, convertError, onOpenDeal, onOpenWorkOrder, onUpdated }: Props) {
   const [lead, setLead] = useState<Lead | null>(null);
   const [activity, setActivity] = useState<LeadActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -305,6 +310,7 @@ export default function LeadSlideOver({ leadId, onClose, onEdit, onConvertToDeal
 
   const TABS: { id: TabId; label: string; icon: React.ElementType; count?: number }[] = [
     { id: 'overview', label: 'Overview', icon: User },
+    { id: 'calls', label: 'Sales Calls', icon: Briefcase },
     { id: 'systems', label: 'Systems', icon: Shield, count: systems.length },
     { id: 'products', label: 'Products', icon: Package, count: lineItems.length },
     { id: 'photos', label: 'Photos', icon: Camera, count: photos.length },
@@ -347,9 +353,11 @@ export default function LeadSlideOver({ leadId, onClose, onEdit, onConvertToDeal
               <CheckCircle className="h-4 w-4 text-green-600" />
               <span className="text-sm font-semibold text-green-800">Converted to Deal</span>
             </div>
-            <a href="#deals" className="flex items-center gap-1 text-xs font-medium text-green-700 hover:text-green-900">
-              View Deal <ExternalLink className="h-3 w-3" />
-            </a>
+            {onOpenDeal && (
+              <button onClick={() => onOpenDeal(lead.converted_deal_id!)} className="flex items-center gap-1 text-xs font-medium text-green-700 hover:text-green-900">
+                View Deal <ExternalLink className="h-3 w-3" />
+              </button>
+            )}
           </div>
         )}
 
@@ -779,6 +787,15 @@ export default function LeadSlideOver({ leadId, onClose, onEdit, onConvertToDeal
               )}
             </div>
           )}
+
+          {activeTab === 'calls' && (
+            <LeadSalesCalls
+              lead={lead}
+              readOnly={isConverted || isLost}
+              onOpenWorkOrder={onOpenWorkOrder}
+              onChanged={() => { loadAll(); onUpdated(); }}
+            />
+          )}
         </div>
 
         {/* Footer Actions */}
@@ -814,12 +831,16 @@ export default function LeadSlideOver({ leadId, onClose, onEdit, onConvertToDeal
                 Mark Lost
               </button>
             </div>
+            {convertError && (
+              <div className="mb-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{convertError}</div>
+            )}
             <button
               onClick={() => onConvertToDeal(lead)}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition-colors shadow-sm"
+              disabled={converting}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-60"
             >
-              Convert to Deal
-              <ArrowRight className="h-4 w-4" />
+              {converting ? 'Creating deal...' : 'Move to Deal'}
+              {!converting && <ArrowRight className="h-4 w-4" />}
             </button>
           </div>
         )}
