@@ -174,7 +174,7 @@ function App() {
       case 'time-attendance':
         return <TimeAttendance />;
       case 'reports':
-        return <Reports />;
+        return <Reports onOpenInvoice={openInvoice} />;
       case 'settings':
         return <Settings />;
       case 'technician-portal':

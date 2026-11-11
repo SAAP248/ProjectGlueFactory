@@ -28,6 +28,7 @@ interface GoBackStats {
 
 const ACTIONABLE_REPORTS: Record<string, string> = {
   'Revenue by Type': 'revenue_by_type',
+  'Merchant Service Fee Report': 'merchant_fees',
 };
 
 const reportCategories = [
@@ -45,7 +46,7 @@ const reportCategories = [
   },
   {
     name: 'Accounting Reports',
-    reports: ['Accounts Receivable Aging', 'Revenue Recognition', 'Profit & Loss Statement', 'Cash Flow Analysis'],
+    reports: ['Merchant Service Fee Report', 'Accounts Receivable Aging', 'Revenue Recognition', 'Profit & Loss Statement', 'Cash Flow Analysis'],
   },
 ];
 

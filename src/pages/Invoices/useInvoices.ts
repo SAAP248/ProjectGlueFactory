@@ -29,6 +29,9 @@ export interface Invoice {
   created_at: string;
   updated_at: string;
   consolidated_invoice_id?: string | null;
+  surcharge_enabled?: boolean;
+  surcharge_pct?: number;
+  surcharge_amount?: number;
   companies?: { name: string } | null;
 }
 
@@ -42,6 +45,7 @@ export interface InvoiceLineItem {
   total: number;
   sort_order: number;
   created_at: string;
+  unit_cost?: number | null;
   product_image_url?: string | null;
 }
 
@@ -536,7 +540,7 @@ export async function recalculateInvoiceTotals(
     // Fetch current invoice to get discount info and amount_paid
     const { data: invoice, error: invoiceError } = await supabase
       .from('invoices')
-      .select('discount, discount_type, amount_paid')
+      .select('discount, discount_type, amount_paid, surcharge_enabled, surcharge_pct')
       .eq('id', invoiceId)
       .maybeSingle();
 
@@ -556,7 +560,11 @@ export async function recalculateInvoiceTotals(
     }
 
     const tax = 0;
-    const total = Math.max(subtotal - discountAmount + tax, 0);
+    const beforeSurcharge = Math.max(subtotal - discountAmount + tax, 0);
+    const surchargeAmount = invoice.surcharge_enabled
+      ? Math.round(beforeSurcharge * (Number(invoice.surcharge_pct) || 0)) / 100
+      : 0;
+    const total = beforeSurcharge + surchargeAmount;
     const balanceDue = Math.max(total - amountPaid, 0);
 
     const { data: updated, error: updateError } = await supabase
@@ -565,6 +573,7 @@ export async function recalculateInvoiceTotals(
         subtotal,
         tax,
         total,
+        surcharge_amount: surchargeAmount,
         balance_due: balanceDue,
         updated_at: new Date().toISOString(),
       })
@@ -580,6 +589,32 @@ export async function recalculateInvoiceTotals(
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error recalculating totals';
     return { data: null, error: message };
+  }
+}
+
+export async function setInvoiceSurcharge(
+  invoiceId: string,
+  enabled: boolean,
+  pct: number
+): Promise<{ data: Invoice | null; error: string | null }> {
+  const { error } = await supabase
+    .from('invoices')
+    .update({ surcharge_enabled: enabled, surcharge_pct: enabled ? pct : 0 })
+    .eq('id', invoiceId);
+  if (error) return { data: null, error: error.message };
+  return recalculateInvoiceTotals(invoiceId);
+}
+
+export async function updateLineItemCost(
+  id: string,
+  unitCost: number | null
+): Promise<{ error: string | null }> {
+  try {
+    const { error } = await supabase.from('invoice_line_items').update({ unit_cost: unitCost }).eq('id', id);
+    return { error: error?.message ?? null };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error updating cost';
+    return { error: message };
   }
 }
 

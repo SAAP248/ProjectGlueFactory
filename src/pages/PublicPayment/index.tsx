@@ -5,6 +5,7 @@ import {
   ChevronDown, ChevronUp, RefreshCw,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { recordPayment } from '../Invoices/useInvoices';
 
 interface InvoiceData {
   invoice: any;
@@ -50,6 +51,7 @@ export default function PublicPayment({ token }: { token: string }) {
   const [confirmationNumber, setConfirmationNumber] = useState('');
   const [detailsExpanded, setDetailsExpanded] = useState(true);
   const [saveMethod, setSaveMethod] = useState(false);
+  const [payError, setPayError] = useState('');
 
   // Card fields
   const [cardName, setCardName] = useState('');
@@ -96,7 +98,7 @@ export default function PublicPayment({ token }: { token: string }) {
 
     const { data: lineItems } = await supabase
       .from('invoice_line_items')
-      .select('*')
+      .select('id, description, quantity, unit_price, total, sort_order')
       .eq('invoice_id', invoice.id)
       .order('sort_order', { ascending: true });
 
@@ -120,14 +122,24 @@ export default function PublicPayment({ token }: { token: string }) {
     return digits;
   }
 
-  function handlePay() {
+  async function handlePay() {
+    if (!data) return;
     setProcessing(true);
+    setPayError('');
     const conf = 'WH-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
-    setTimeout(() => {
-      setConfirmationNumber(conf);
-      setProcessing(false);
-      setPaid(true);
-    }, 2000);
+    const { error: payErr } = await recordPayment(
+      data.invoice.id,
+      parseFloat(payAmount),
+      paymentMethod === 'card' ? 'credit_card' : 'ACH',
+      conf
+    );
+    setProcessing(false);
+    if (payErr) {
+      setPayError('We could not process this payment. Please try again.');
+      return;
+    }
+    setConfirmationNumber(conf);
+    setPaid(true);
   }
 
   function canSubmit() {
@@ -373,6 +385,12 @@ export default function PublicPayment({ token }: { token: string }) {
                       <span className="text-gray-800">{formatCurrency(invoice.tax)}</span>
                     </div>
                   )}
+                  {toNum(invoice.surcharge_amount) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Card fee surcharge ({toNum(invoice.surcharge_pct)}%)</span>
+                      <span className="text-gray-800">{formatCurrency(invoice.surcharge_amount)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm font-semibold pt-2 border-t border-gray-100">
                     <span className="text-gray-700">Total</span>
                     <span className="text-gray-900">{formatCurrency(invoice.total)}</span>
@@ -603,6 +621,11 @@ export default function PublicPayment({ token }: { token: string }) {
 
             {/* Pay button */}
             <div className="px-6 sm:px-8 py-5 bg-gray-50 border-t border-gray-100">
+              {payError && (
+                <p className="mb-3 text-sm text-red-600 flex items-center gap-1.5">
+                  <AlertTriangle className="h-4 w-4" /> {payError}
+                </p>
+              )}
               <button
                 onClick={handlePay}
                 disabled={!canSubmit() || processing}

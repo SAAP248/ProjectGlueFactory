@@ -3,12 +3,13 @@ import {
   Settings as SettingsIcon, User, Bell, Shield as ShieldIcon, Database,
   ShieldAlert, Flame, ShieldCheck, KeyRound, Network, Tv2, DoorOpen,
   Plus, Trash2, GripVertical, CheckCircle2, RotateCcw, Map, Eye, EyeOff,
-  ExternalLink, Check, Loader2, BookOpen, PanelLeft
+  ExternalLink, Check, Loader2, BookOpen, PanelLeft, CreditCard
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAppSetting, saveAppSetting } from '../lib/useAppSettings';
 import ProposalDefaultsPanel from './Estimates/ProposalDefaultsPanel';
 import SidebarMenuPanel from './Settings/SidebarMenuPanel';
+import MerchantFeesPanel from './Settings/MerchantFeesPanel';
 
 interface SystemType {
   id: string;
@@ -49,7 +50,7 @@ const iconComponentMap: Record<string, React.ElementType> = {
 };
 
 export default function Settings() {
-  const [activeSection, setActiveSection] = useState<'system-types' | 'go-back-reasons' | 'integrations' | 'proposal-defaults' | 'sidebar-menu'>('integrations');
+  const [activeSection, setActiveSection] = useState<'system-types' | 'go-back-reasons' | 'integrations' | 'proposal-defaults' | 'sidebar-menu' | 'merchant-fees'>('integrations');
 
   const [systemTypes, setSystemTypes] = useState<SystemType[]>([]);
   const [loadingTypes, setLoadingTypes] = useState(true);
@@ -217,11 +218,23 @@ export default function Settings() {
           <PanelLeft className="h-4 w-4" />
           Sidebar Menu
         </button>
+        <button
+          onClick={() => setActiveSection('merchant-fees')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeSection === 'merchant-fees'
+              ? 'bg-blue-600 text-white'
+              : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          <CreditCard className="h-4 w-4" />
+          Merchant Fees
+        </button>
       </div>
 
       {activeSection === 'integrations' && <IntegrationsPanel />}
       {activeSection === 'proposal-defaults' && <ProposalDefaultsPanel />}
       {activeSection === 'sidebar-menu' && <SidebarMenuPanel />}
+      {activeSection === 'merchant-fees' && <MerchantFeesPanel />}
 
       {activeSection === 'system-types' && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">

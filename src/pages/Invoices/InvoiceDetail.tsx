@@ -27,6 +27,7 @@ import {
 } from './useInvoices';
 import type { InvoiceLineItem } from './useInvoices';
 import InvoiceActions from './InvoiceActions';
+import InvoicePnlPanel from './InvoicePnlPanel';
 import LinkedWorkOrdersCard from '../WorkOrders/LinkedWorkOrdersCard';
 
 // ---------------------------------------------------------------------------
@@ -912,6 +913,15 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
               </span>
             </div>
 
+            {(Number(invoice.surcharge_amount) || 0) > 0 && (
+              <div className="flex justify-between">
+                <span className="text-gray-600">Card fee surcharge ({Number(invoice.surcharge_pct)}%)</span>
+                <span className="font-medium text-gray-900">
+                  {fmt.format(Number(invoice.surcharge_amount))}
+                </span>
+              </div>
+            )}
+
             <div className="flex justify-between border-t border-gray-200 pt-2">
               <span className="font-semibold text-gray-900">Total</span>
               <span className="font-semibold text-gray-900">
@@ -959,6 +969,8 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
           )}
         </div>
       </div>
+
+      <InvoicePnlPanel invoice={invoice} lineItems={lineItems} onChanged={refetchLineItems} />
     </div>
   );
 }
