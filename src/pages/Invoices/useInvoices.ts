@@ -525,66 +525,10 @@ export async function recalculateInvoiceTotals(
   invoiceId: string
 ): Promise<{ data: Invoice | null; error: string | null }> {
   try {
-    // Fetch all line items for this invoice
-    const { data: items, error: itemsError } = await supabase
-      .from('invoice_line_items')
-      .select('total')
-      .eq('invoice_id', invoiceId);
-
-    if (itemsError) {
-      return { data: null, error: itemsError.message };
-    }
-
-    const subtotal = (items || []).reduce((sum, item) => sum + (Number(item.total) || 0), 0);
-
-    // Fetch current invoice to get discount info and amount_paid
-    const { data: invoice, error: invoiceError } = await supabase
-      .from('invoices')
-      .select('discount, discount_type, amount_paid, surcharge_enabled, surcharge_pct')
-      .eq('id', invoiceId)
-      .maybeSingle();
-
-    if (invoiceError || !invoice) {
-      return { data: null, error: invoiceError?.message || 'Invoice not found' };
-    }
-
-    const discount = Number(invoice.discount) || 0;
-    const discountType = invoice.discount_type || 'flat';
-    const amountPaid = Number(invoice.amount_paid) || 0;
-
-    let discountAmount = 0;
-    if (discountType === 'percentage') {
-      discountAmount = subtotal * (discount / 100);
-    } else {
-      discountAmount = discount;
-    }
-
-    const tax = 0;
-    const beforeSurcharge = Math.max(subtotal - discountAmount + tax, 0);
-    const surchargeAmount = invoice.surcharge_enabled
-      ? Math.round(beforeSurcharge * (Number(invoice.surcharge_pct) || 0)) / 100
-      : 0;
-    const total = beforeSurcharge + surchargeAmount;
-    const balanceDue = Math.max(total - amountPaid, 0);
-
-    const { data: updated, error: updateError } = await supabase
-      .from('invoices')
-      .update({
-        subtotal,
-        tax,
-        total,
-        surcharge_amount: surchargeAmount,
-        balance_due: balanceDue,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', invoiceId)
-      .select('*')
-      .maybeSingle();
-
-    if (updateError) {
-      return { data: null, error: updateError.message };
-    }
-
+    const { data, error } = await supabase.rpc('acct_recalc_invoice', { p_invoice_id: invoiceId });
+    if (error) return { data: null, error: error.message };
+    const updated = Array.isArray(data) ? data[0] : data;
+    if (!updated) return { data: null, error: 'Invoice not found' };
     return { data: updated as Invoice, error: null };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error recalculating totals';

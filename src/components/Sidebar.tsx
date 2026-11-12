@@ -8,6 +8,7 @@ import {
   Smartphone,
   Globe,
   ShoppingBag,
+  Landmark,
   SlidersHorizontal,
 } from 'lucide-react';
 import { useRole } from '../contexts/RoleContext';
@@ -27,6 +28,7 @@ const portalItems = [
   { id: 'technician-portal', label: 'Tech Portal', icon: Smartphone },
   { id: 'customer-portal', label: 'Customer Portal', icon: Globe },
   { id: 'product-central', label: 'Product Central', icon: ShoppingBag },
+  { id: 'accounting-portal', label: 'Accounting', icon: Landmark },
 ];
 
 function formatElapsed(seconds: number) {

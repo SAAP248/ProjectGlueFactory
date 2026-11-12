@@ -18,3 +18,13 @@
   .print\:break-after-page { break-after: page; }
   @page { size: letter; margin: 0.25in; }
 }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes popIn { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+
+@media print {
+  body.acct-printing * { visibility: hidden; }
+  body.acct-printing .acct-print-area, body.acct-printing .acct-print-area * { visibility: visible; }
+  body.acct-printing .acct-print-area { position: absolute; left: 0; top: 0; width: 100%; }
+  body.acct-printing .no-print { display: none !important; }
+}

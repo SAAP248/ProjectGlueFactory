@@ -33,6 +33,7 @@ import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import TechnicianPortal from './pages/TechnicianPortal';
 import CustomerPortal from './pages/CustomerPortal';
+import AccountingPortal from './pages/AccountingPortal';
 import ProductCentral from './pages/ProductCentral';
 import Tickets from './pages/Tickets/index';
 import Leads from './pages/Leads/index';
@@ -181,6 +182,8 @@ function App() {
         return <TechnicianPortal />;
       case 'customer-portal':
         return <CustomerPortal />;
+      case 'accounting-portal':
+        return <AccountingPortal onOpenInvoice={openInvoice} onViewCustomer={navigateToCustomer} />;
       case 'product-central':
         return <ProductCentral />;
       case 'photos':
