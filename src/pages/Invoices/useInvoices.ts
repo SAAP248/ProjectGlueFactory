@@ -32,6 +32,15 @@ export interface Invoice {
   surcharge_enabled?: boolean;
   surcharge_pct?: number;
   surcharge_amount?: number;
+  tax_exempt?: boolean;
+  taxable_amount?: number;
+  tax_state_amount?: number;
+  tax_county_amount?: number;
+  tax_city_amount?: number;
+  tax_state_rate?: number;
+  tax_county_rate?: number;
+  tax_city_rate?: number;
+  tax_county?: string | null;
   companies?: { name: string } | null;
 }
 
@@ -46,6 +55,7 @@ export interface InvoiceLineItem {
   sort_order: number;
   created_at: string;
   unit_cost?: number | null;
+  is_taxable?: boolean | null;
   product_image_url?: string | null;
 }
 
@@ -409,6 +419,7 @@ export async function addLineItem(
         unit_price: item.unit_price,
         total: lineTotal,
         sort_order: nextOrder,
+        is_taxable: item.is_taxable ?? null,
       })
       .select('*')
       .single();
@@ -482,6 +493,11 @@ export async function updateLineItem(
 
     if (updateError) {
       return { data: null, error: updateError.message };
+    }
+
+    if (data.is_taxable !== undefined && updated) {
+      const { error: recalcError } = await recalculateInvoiceTotals((updated as InvoiceLineItem).invoice_id);
+      if (recalcError) return { data: updated as InvoiceLineItem, error: recalcError };
     }
 
     return { data: updated as InvoiceLineItem, error: null };

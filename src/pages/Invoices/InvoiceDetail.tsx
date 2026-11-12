@@ -29,6 +29,8 @@ import type { InvoiceLineItem } from './useInvoices';
 import InvoiceActions from './InvoiceActions';
 import InvoicePnlPanel from './InvoicePnlPanel';
 import LinkedWorkOrdersCard from '../WorkOrders/LinkedWorkOrdersCard';
+import { TaxToggle, TaxBreakdownHint, ExemptNotice } from '../../components/TaxToggle';
+import { useLaborTaxable, defaultTaxable } from '../../lib/salesTax';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -50,6 +52,7 @@ interface ProductResult {
   price: number;
   manufacturer: string | null;
   image_url: string | null;
+  is_taxable?: boolean | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,7 +149,7 @@ function ProductSearch({
     setLoading(true);
     let query = supabase
       .from('products')
-      .select('id, sku, name, price, manufacturer, image_url')
+      .select('id, sku, name, price, manufacturer, image_url, is_taxable')
       .eq('is_active', true)
       .limit(10);
 
@@ -261,6 +264,8 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
   const [newPrice, setNewPrice] = useState('');
   const [newProductId, setNewProductId] = useState<string | null>(null);
   const [productSearchKey, setProductSearchKey] = useState(0);
+  const laborTaxable = useLaborTaxable();
+  const [newTaxable, setNewTaxable] = useState<boolean | null>(null);
 
   // Saving states
   const [saving, setSaving] = useState(false);
@@ -306,6 +311,14 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
     refetchLineItems();
   }
 
+  async function handleToggleTaxable(itemId: string, value: boolean) {
+    setLocalItems((items) => items.map((i) => (i.id === itemId ? { ...i, is_taxable: value } : i)));
+    const { error: err } = await updateLineItem(itemId, { is_taxable: value });
+    if (err) alert(`Error updating tax setting: ${err}`);
+    refetchLineItems();
+    refetch();
+  }
+
   async function handleDeleteLineItem(itemId: string) {
     if (!confirm('Delete this line item?')) return;
     setSaving(true);
@@ -332,6 +345,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
       quantity: qty,
       unit_price: price,
       total: qty * price,
+      is_taxable: newTaxable,
     });
     setSaving(false);
     if (err) {
@@ -342,8 +356,10 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
     setNewQty('1');
     setNewPrice('');
     setNewProductId(null);
+    setNewTaxable(null);
     setProductSearchKey((k) => k + 1);
     refetchLineItems();
+    refetch();
   }
 
   function handleDownloadPdf() {
@@ -671,6 +687,9 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
                   <th className="w-28 pb-2 pr-4 text-right font-semibold text-gray-600">
                     Amount
                   </th>
+                  <th className="w-20 pb-2 pr-2 text-center font-semibold text-gray-600">
+                    Tax
+                  </th>
                   <th className="w-20 pb-2" />
                 </tr>
               </thead>
@@ -712,6 +731,9 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
                         {fmt.format(
                           (Number(editQty) || 0) * (Number(editPrice) || 0)
                         )}
+                      </td>
+                      <td className="py-2 pr-2 text-center">
+                        <TaxToggle taxable={!!item.is_taxable} onChange={(v) => handleToggleTaxable(item.id, v)} />
                       </td>
                       <td className="py-2">
                         <div className="flex items-center justify-end gap-1">
@@ -775,6 +797,9 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
                       <td className="py-2.5 pr-4 text-right font-medium text-gray-900">
                         {fmt.format(item.total)}
                       </td>
+                      <td className="py-2.5 pr-2 text-center">
+                        <TaxToggle taxable={!!item.is_taxable} onChange={(v) => handleToggleTaxable(item.id, v)} />
+                      </td>
                       <td className="py-2.5">
                         <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                           <button
@@ -809,9 +834,11 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
                             setNewProductId(product.id);
                             setNewDesc(product.name);
                             setNewPrice(String(product.price));
+                            setNewTaxable(defaultTaxable(product, laborTaxable));
                           } else {
                             setNewProductId(null);
                             setNewDesc(term);
+                            setNewTaxable(null);
                           }
                         }}
                       />
@@ -841,6 +868,12 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
                         (Number(newQty) || 0) * (Number(newPrice) || 0)
                       )}
                     </td>
+                    <td className="py-2 pr-2 text-center">
+                      <TaxToggle
+                        taxable={newTaxable ?? defaultTaxable(null, laborTaxable)}
+                        onChange={setNewTaxable}
+                      />
+                    </td>
                     <td className="py-2">
                       <div className="flex items-center justify-end gap-1">
                         <button
@@ -858,6 +891,7 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
                             setNewQty('1');
                             setNewPrice('');
                             setNewProductId(null);
+                            setNewTaxable(null);
                           }}
                           className="rounded-md p-1 text-gray-400 hover:bg-gray-100"
                           title="Cancel"
@@ -907,11 +941,29 @@ export default function InvoiceDetail({ invoiceId, onBack }: Props) {
             )}
 
             <div className="flex justify-between">
-              <span className="text-gray-600">Tax</span>
+              <span className="inline-flex items-center gap-1.5 text-gray-600">
+                Sales tax
+                {!invoice.tax_exempt && (Number(invoice.tax) || 0) > 0 && (
+                  <TaxBreakdownHint
+                    quote={{
+                      taxable: Number(invoice.taxable_amount) || 0,
+                      state: Number(invoice.tax_state_amount) || 0,
+                      county: Number(invoice.tax_county_amount) || 0,
+                      city: Number(invoice.tax_city_amount) || 0,
+                      state_rate: Number(invoice.tax_state_rate) || 0,
+                      county_rate: Number(invoice.tax_county_rate) || 0,
+                      city_rate: Number(invoice.tax_city_rate) || 0,
+                      county_name: invoice.tax_county ?? null,
+                      city_name: null,
+                    }}
+                  />
+                )}
+              </span>
               <span className="font-medium text-gray-900">
                 {fmt.format(invoice.tax)}
               </span>
             </div>
+            {invoice.tax_exempt && <ExemptNotice certificate={null} expires={null} />}
 
             {(Number(invoice.surcharge_amount) || 0) > 0 && (
               <div className="flex justify-between">
