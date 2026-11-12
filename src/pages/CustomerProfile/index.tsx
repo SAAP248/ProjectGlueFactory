@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Star, Phone, Mail, MapPin, Globe, CreditCard as Edit, Wrench, FileText, Building2, Home, ShieldAlert, Network, ChevronRight, CheckCircle2, CircleDashed, XCircle, MinusCircle } from 'lucide-react';
+import { ArrowLeft, Star, Phone, Mail, MapPin, Globe, CreditCard as Edit, Wrench, FileText, Building2, Home, ShieldAlert, ShieldCheck, Network, ChevronRight, CheckCircle2, CircleDashed, XCircle, MinusCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { QB_SYNC_LABELS, QB_SYNC_STYLES, formatLastSynced, type QbSyncStatus } from '../../lib/quickbooks';
 import type {
@@ -342,6 +342,25 @@ export default function CustomerProfile({ customerId, onBack, onViewCustomer, on
                     onSaved={value => setCompany(prev => (prev ? { ...prev, verbal_passcode: value } : prev))}
                   />
                   <PastDueBadge summary={pastDue} onClick={openOverdueInvoices} />
+                  {company.tax_exempt && (() => {
+                    const expired = !!company.tax_exempt_expires && company.tax_exempt_expires < new Date().toISOString().slice(0, 10);
+                    return (
+                      <span
+                        className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded border ${
+                          expired ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        }`}
+                        title={company.tax_exempt_cert ? `Certificate ${company.tax_exempt_cert}` : undefined}
+                      >
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        {expired ? 'Tax exempt certificate expired' : 'Tax exempt'}
+                        {company.tax_exempt_expires && !expired && (
+                          <span className="text-emerald-600/80">
+                            through {new Date(company.tax_exempt_expires + 'T00:00:00').toLocaleDateString('en-US')}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <div className="flex items-center gap-4 mt-2 flex-wrap text-sm text-gray-500">
                   {(() => {

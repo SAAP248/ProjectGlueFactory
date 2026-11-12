@@ -4,6 +4,8 @@ import { supabase } from '../../lib/supabase';
 import { LineItemProductSearch } from '../Invoices/NewInvoiceSlideOver';
 import { saveEstimate, formatMoney } from './useEstimates';
 import type { EstimateDetailData, LineItemInput } from './useEstimates';
+import { TaxToggle, TaxBreakdownHint, ExemptNotice } from '../../components/TaxToggle';
+import { useLaborTaxable, useTaxQuote, defaultTaxable } from '../../lib/salesTax';
 
 interface Props {
   open: boolean;
@@ -15,12 +17,12 @@ interface Props {
 
 interface CompanyOption { id: string; name: string }
 interface SiteOption { id: string; name: string | null; address: string | null; city: string | null; state: string | null }
-type Row = LineItemInput & { key: string };
+type Row = LineItemInput & { key: string; is_taxable: boolean };
 
 const inputCls = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow';
 
 let rowCounter = 0;
-const newRow = (): Row => ({ key: `row-${++rowCounter}`, description: '', quantity: 1, unit_price: 0, product_id: null });
+const newRow = (taxable = false): Row => ({ key: `row-${++rowCounter}`, description: '', quantity: 1, unit_price: 0, product_id: null, is_taxable: taxable });
 const isoDate = (offsetDays = 0) => {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
@@ -39,7 +41,7 @@ export default function EstimateForm({ open, editing, presetCompany, onClose, on
   const [siteId, setSiteId] = useState('');
   const [estimateDate, setEstimateDate] = useState(isoDate());
   const [expirationDate, setExpirationDate] = useState(isoDate(30));
-  const [taxRate, setTaxRate] = useState(0);
+  const laborTaxable = useLaborTaxable();
   const [notes, setNotes] = useState('');
   const [terms, setTerms] = useState('');
   const [rows, setRows] = useState<Row[]>([newRow()]);
@@ -60,8 +62,6 @@ export default function EstimateForm({ open, editing, presetCompany, onClose, on
       setSiteId(e.site_id || '');
       setEstimateDate(e.estimate_date || isoDate());
       setExpirationDate(e.expiration_date || '');
-      const sub = Number(e.subtotal) || 0;
-      setTaxRate(sub > 0 ? Math.round(((Number(e.tax) || 0) / sub) * 10000) / 100 : 0);
       setNotes(e.notes || '');
       setTerms(e.terms || '');
       setRows(
@@ -73,20 +73,24 @@ export default function EstimateForm({ open, editing, presetCompany, onClose, on
               quantity: Number(li.quantity) || 0,
               unit_price: Number(li.unit_price) || 0,
               product_id: li.product_id,
+              is_taxable: !!li.is_taxable,
             }))
-          : [newRow()]
+          : [newRow(laborTaxable)]
       );
     } else {
       setCompany(presetCompany || null);
       setSiteId('');
       setEstimateDate(isoDate());
       setExpirationDate(isoDate(30));
-      setTaxRate(0);
       setNotes('');
       setTerms('');
-      setRows([newRow()]);
+      setRows([newRow(laborTaxable)]);
     }
-  }, [open, editing, presetCompany]);
+  }, [open, editing, presetCompany]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setRows((prev) => prev.map((r) => (r.id || r.product_id || r.description.trim() ? r : { ...r, is_taxable: laborTaxable })));
+  }, [laborTaxable]);
 
   useEffect(() => {
     if (!customerSearch.trim() || company) {
@@ -134,7 +138,7 @@ export default function EstimateForm({ open, editing, presetCompany, onClose, on
   const removeRow = (key: string) =>
     setRows((prev) => {
       const next = prev.filter((r) => r.key !== key);
-      return next.length ? next : [newRow()];
+      return next.length ? next : [newRow(laborTaxable)];
     });
   const moveRow = (index: number, dir: -1 | 1) =>
     setRows((prev) => {
@@ -146,7 +150,13 @@ export default function EstimateForm({ open, editing, presetCompany, onClose, on
     });
 
   const subtotal = rows.reduce((s, r) => s + (Number(r.quantity) || 0) * (Number(r.unit_price) || 0), 0);
-  const taxAmount = Math.round(subtotal * (Number(taxRate) || 0)) / 100;
+  const { quote: taxQuote, error: taxError } = useTaxQuote(
+    company?.id ?? null,
+    siteId || null,
+    estimateDate,
+    rows.filter((r) => r.description.trim()).map((r) => ({ quantity: r.quantity, unit_price: r.unit_price, taxable: r.is_taxable }))
+  );
+  const taxAmount = Number(taxQuote?.tax) || 0;
   const total = subtotal + taxAmount;
 
   const handleSave = async () => {
@@ -173,8 +183,8 @@ export default function EstimateForm({ open, editing, presetCompany, onClose, on
         notes: notes.trim() || null,
         terms: terms.trim() || null,
       },
-      filled.map(({ id: rowId, description, quantity, unit_price, product_id }) => ({
-        id: rowId, description: description.trim(), quantity, unit_price, product_id,
+      filled.map(({ id: rowId, description, quantity, unit_price, product_id, is_taxable }) => ({
+        id: rowId, description: description.trim(), quantity, unit_price, product_id, is_taxable,
       }))
     );
     setSaving(false);
@@ -294,7 +304,7 @@ export default function EstimateForm({ open, editing, presetCompany, onClose, on
               <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
                 <Package className="w-4 h-4 text-gray-400" /> Line Items
               </h3>
-              <button type="button" onClick={() => setRows((p) => [...p, newRow()])} className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700">
+              <button type="button" onClick={() => setRows((p) => [...p, newRow(laborTaxable)])} className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700">
                 <Plus className="w-4 h-4" /> Add Item
               </button>
             </div>
@@ -316,7 +326,7 @@ export default function EstimateForm({ open, editing, presetCompany, onClose, on
                       <LineItemProductSearch
                         description={row.description}
                         onDescriptionChange={(val) => updateRow(row.key, { description: val })}
-                        onProductSelect={(p) => updateRow(row.key, { description: p.name, unit_price: Number(p.price) || 0, product_id: p.id })}
+                        onProductSelect={(p) => updateRow(row.key, { description: p.name, unit_price: Number(p.price) || 0, product_id: p.id, is_taxable: defaultTaxable(p, laborTaxable) })}
                       />
                       <div className="flex items-end gap-2">
                         <div className="w-20">
@@ -330,6 +340,10 @@ export default function EstimateForm({ open, editing, presetCompany, onClose, on
                           <input type="number" min={0} step={0.01} value={row.unit_price}
                             onChange={(e) => updateRow(row.key, { unit_price: parseFloat(e.target.value) || 0 })}
                             className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-right focus:ring-2 focus:ring-blue-500 outline-none" />
+                        </div>
+                        <div className="text-center">
+                          <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">Tax</label>
+                          <TaxToggle taxable={row.is_taxable} onChange={(v) => updateRow(row.key, { is_taxable: v })} />
                         </div>
                         <div className="w-28 text-right">
                           <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">Total</label>
@@ -351,15 +365,18 @@ export default function EstimateForm({ open, editing, presetCompany, onClose, on
                 <span className="font-medium text-gray-900">{formatMoney(subtotal)}</span>
               </div>
               <div className="flex items-center justify-between px-4 py-2.5 text-sm">
-                <span className="flex items-center gap-2 text-gray-600">
-                  Tax
-                  <input type="number" min={0} max={100} step={0.01} value={taxRate}
-                    onChange={(e) => setTaxRate(Math.max(0, parseFloat(e.target.value) || 0))}
-                    className="w-20 border border-gray-300 rounded-md px-2 py-1 text-sm text-right focus:ring-2 focus:ring-blue-500 outline-none" />
-                  %
+                <span className="flex items-center gap-1.5 text-gray-600">
+                  Sales tax
+                  {taxQuote && taxAmount > 0 && <TaxBreakdownHint quote={taxQuote} />}
                 </span>
-                <span className="font-medium text-gray-900">{formatMoney(taxAmount)}</span>
+                <span className="font-medium text-gray-900">{company ? formatMoney(taxAmount) : '—'}</span>
               </div>
+              {(taxQuote?.customer_exempt || taxError) && (
+                <div className="px-4 py-2.5">
+                  {taxQuote?.customer_exempt && <ExemptNotice certificate={taxQuote.certificate} expires={taxQuote.certificate_expires} />}
+                  {taxError && <p className="text-xs text-red-600">{taxError}</p>}
+                </div>
+              )}
               <div className="flex justify-between px-4 py-3 bg-gray-50">
                 <span className="font-semibold text-gray-900">Total</span>
                 <span className="text-lg font-bold text-gray-900">{formatMoney(total)}</span>

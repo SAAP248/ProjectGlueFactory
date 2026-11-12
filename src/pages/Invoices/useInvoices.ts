@@ -395,7 +395,7 @@ export async function deleteInvoice(
 
 export async function addLineItem(
   invoiceId: string,
-  item: Omit<InvoiceLineItem, 'id' | 'invoice_id' | 'created_at'>
+  item: Omit<InvoiceLineItem, 'id' | 'invoice_id' | 'created_at' | 'sort_order'>
 ): Promise<{ data: InvoiceLineItem | null; error: string | null }> {
   try {
     const lineTotal = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);

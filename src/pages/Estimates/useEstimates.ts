@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
-import { createInvoice } from '../Invoices/useInvoices';
+import { createInvoice, recalculateInvoiceTotals } from '../Invoices/useInvoices';
 
 export interface EstimateRecord {
   id: string;
@@ -49,6 +49,7 @@ export interface EstimateLineItem {
   unit_price: number;
   total: number;
   sort_order: number | null;
+  is_taxable?: boolean | null;
 }
 
 export interface EstimateDetailData {
@@ -64,6 +65,7 @@ export interface LineItemInput {
   quantity: number;
   unit_price: number;
   product_id: string | null;
+  is_taxable?: boolean | null;
 }
 
 export interface EstimateInput {
@@ -250,6 +252,7 @@ export async function saveEstimate(
         total: (Number(li.quantity) || 0) * (Number(li.unit_price) || 0),
         product_id: li.product_id,
         sort_order: index,
+        ...(li.is_taxable != null ? { is_taxable: li.is_taxable } : {}),
       };
       return li.id
         ? supabase.from('estimate_line_items').update(row).eq('id', li.id)
@@ -257,6 +260,9 @@ export async function saveEstimate(
     })
   );
   if (results.some((r) => r.error)) return { id, error: 'Estimate saved, but some line items failed to save.' };
+
+  const { error: taxErr } = await supabase.rpc('acct_recalc_estimate', { p_estimate_id: id });
+  if (taxErr) return { id, error: 'Estimate saved, but sales tax could not be figured.' };
 
   return { id, error: null };
 }
@@ -289,6 +295,7 @@ export async function duplicateEstimate(detail: EstimateDetailData): Promise<{ i
       quantity: Number(li.quantity) || 0,
       unit_price: Number(li.unit_price) || 0,
       product_id: li.product_id,
+      is_taxable: li.is_taxable ?? null,
     }))
   );
 }
@@ -300,7 +307,6 @@ export async function convertEstimateToInvoice(detail: EstimateDetailData): Prom
     .from('invoices').select('id').eq('estimate_id', estimate.id).limit(1).maybeSingle();
   if (already) return { invoiceId: already.id as string, error: null };
 
-  // Invoices recalculate totals from line items with no separate tax, so tax is carried as its own line.
   const rows = lineItems.map((li, index) => ({
     product_id: li.product_id,
     description: li.description || 'Item',
@@ -308,11 +314,8 @@ export async function convertEstimateToInvoice(detail: EstimateDetailData): Prom
     unit_price: Number(li.unit_price) || 0,
     total: (Number(li.quantity) || 0) * (Number(li.unit_price) || 0),
     sort_order: index,
+    is_taxable: li.is_taxable ?? null,
   }));
-  const tax = Number(estimate.tax) || 0;
-  if (tax > 0) {
-    rows.push({ product_id: null, description: 'Sales Tax', quantity: 1, unit_price: tax, total: tax, sort_order: rows.length });
-  }
   const total = rows.reduce((s, r) => s + r.total, 0);
 
   const due = new Date();
@@ -340,6 +343,9 @@ export async function convertEstimateToInvoice(detail: EstimateDetailData): Prom
       .insert(rows.map((r) => ({ ...r, invoice_id: invoice.id })));
     if (liErr) return { invoiceId: invoice.id, error: 'Invoice created, but its line items could not be copied.' };
   }
+
+  const { error: recalcErr } = await recalculateInvoiceTotals(invoice.id);
+  if (recalcErr) return { invoiceId: invoice.id, error: 'Invoice created, but sales tax could not be figured.' };
 
   return { invoiceId: invoice.id, error: null };
 }

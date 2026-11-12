@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { createInvoice, addLineItem } from './useInvoices';
+import { TaxToggle, TaxBreakdownHint, ExemptNotice } from '../../components/TaxToggle';
+import { useLaborTaxable, useTaxQuote, defaultTaxable } from '../../lib/salesTax';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,6 +47,7 @@ export interface ProductOption {
   sku: string;
   manufacturer: string | null;
   image_url: string | null;
+  is_taxable?: boolean | null;
 }
 
 interface LineItemRow {
@@ -53,6 +56,7 @@ interface LineItemRow {
   quantity: number;
   unit_price: number;
   product_id: string | null;
+  taxable: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -109,7 +113,7 @@ export function LineItemProductSearch({
     setLoading(true);
     let query = supabase
       .from('products')
-      .select('id, name, price, sku, manufacturer, image_url')
+      .select('id, name, price, sku, manufacturer, image_url, is_taxable')
       .eq('is_active', true)
       .limit(10);
 
@@ -234,8 +238,13 @@ export default function NewInvoiceSlideOver({ open, onClose, onCreated }: Props)
   const [notes, setNotes] = useState('');
 
   // ── Line items ───────────────────────────────────────────────────────
-  const [lineItems, setLineItems] = useState<LineItemRow[]>([
-    { key: nextKey(), description: '', quantity: 1, unit_price: 0, product_id: null },
+  const laborTaxable = useLaborTaxable();
+  const blankRow = useCallback(
+    (): LineItemRow => ({ key: nextKey(), description: '', quantity: 1, unit_price: 0, product_id: null, taxable: laborTaxable }),
+    [laborTaxable]
+  );
+  const [lineItems, setLineItems] = useState<LineItemRow[]>(() => [
+    { key: nextKey(), description: '', quantity: 1, unit_price: 0, product_id: null, taxable: false },
   ]);
 
 
@@ -259,14 +268,15 @@ export default function NewInvoiceSlideOver({ open, onClose, onCreated }: Props)
       setDueDate(plus30());
       setTerms('Net 30');
       setNotes('');
-      setLineItems([{ key: nextKey(), description: '', quantity: 1, unit_price: 0, product_id: null }]);
+      setLineItems([blankRow()]);
       setError(null);
       setValidationErrors({});
-      setActiveProductRow(null);
-      setProductSearch('');
-      setProductResults([]);
     }
-  }, [open]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setLineItems((prev) => prev.map((li) => (li.product_id || li.description.trim() ? li : { ...li, taxable: laborTaxable })));
+  }, [laborTaxable]);
 
   // ====================================================================
   // Customer search debounce
@@ -334,7 +344,7 @@ export default function NewInvoiceSlideOver({ open, onClose, onCreated }: Props)
   // Line item helpers
   // ====================================================================
   const updateLineItem = useCallback(
-    (key: string, field: keyof LineItemRow, value: string | number | null) => {
+    (key: string, field: keyof LineItemRow, value: string | number | boolean | null) => {
       setLineItems((prev) =>
         prev.map((li) => (li.key === key ? { ...li, [field]: value } : li))
       );
@@ -345,16 +355,13 @@ export default function NewInvoiceSlideOver({ open, onClose, onCreated }: Props)
   const removeLineItem = useCallback((key: string) => {
     setLineItems((prev) => {
       const next = prev.filter((li) => li.key !== key);
-      return next.length ? next : [{ key: nextKey(), description: '', quantity: 1, unit_price: 0, product_id: null }];
+      return next.length ? next : [blankRow()];
     });
-  }, []);
+  }, [blankRow]);
 
   const addEmptyLineItem = useCallback(() => {
-    setLineItems((prev) => [
-      ...prev,
-      { key: nextKey(), description: '', quantity: 1, unit_price: 0, product_id: null },
-    ]);
-  }, []);
+    setLineItems((prev) => [...prev, blankRow()]);
+  }, [blankRow]);
 
   const selectProduct = useCallback(
     (rowKey: string, product: ProductOption) => {
@@ -366,12 +373,13 @@ export default function NewInvoiceSlideOver({ open, onClose, onCreated }: Props)
                 description: product.name,
                 unit_price: Number(product.price) || 0,
                 product_id: product.id,
+                taxable: defaultTaxable(product, laborTaxable),
               }
             : li
         )
       );
     },
-    []
+    [laborTaxable]
   );
 
   // ====================================================================
@@ -381,6 +389,13 @@ export default function NewInvoiceSlideOver({ open, onClose, onCreated }: Props)
     (sum, li) => sum + (Number(li.quantity) || 0) * (Number(li.unit_price) || 0),
     0
   );
+  const { quote: taxQuote, error: taxError } = useTaxQuote(
+    selectedCompany?.id ?? null,
+    selectedSiteId || null,
+    invoiceDate,
+    lineItems.filter((li) => li.description.trim())
+  );
+  const previewTax = Number(taxQuote?.tax) || 0;
 
   // ====================================================================
   // Validation
@@ -445,6 +460,7 @@ export default function NewInvoiceSlideOver({ open, onClose, onCreated }: Props)
           unit_price: Number(item.unit_price) || 0,
           total: (Number(item.quantity) || 1) * (Number(item.unit_price) || 0),
           product_id: item.product_id || null,
+          is_taxable: item.taxable,
         });
 
         if (lineError) {
@@ -762,6 +778,16 @@ export default function NewInvoiceSlideOver({ open, onClose, onCreated }: Props)
                       />
                     </div>
 
+                    <div className="text-center">
+                      <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">
+                        Tax
+                      </label>
+                      <TaxToggle
+                        taxable={item.taxable}
+                        onChange={(v) => updateLineItem(item.key, 'taxable', v)}
+                      />
+                    </div>
+
                     <div className="w-24 text-right">
                       <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">
                         Total
@@ -784,12 +810,33 @@ export default function NewInvoiceSlideOver({ open, onClose, onCreated }: Props)
               ))}
             </div>
 
-            {/* Subtotal */}
-            <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-200">
-              <span className="text-sm font-medium text-gray-700">Subtotal</span>
-              <span className="text-base font-semibold text-gray-900">
-                {formatCurrency(subtotal)}
-              </span>
+            <div className="mt-4 pt-3 border-t border-gray-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Subtotal</span>
+                <span className="text-sm font-medium text-gray-900">{formatCurrency(subtotal)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="inline-flex items-center gap-1.5 text-sm text-gray-600">
+                  Sales tax
+                  {taxQuote && previewTax > 0 && <TaxBreakdownHint quote={taxQuote} />}
+                </span>
+                <span className="text-sm font-medium text-gray-900">
+                  {selectedCompany ? formatCurrency(previewTax) : '—'}
+                </span>
+              </div>
+              {taxQuote?.customer_exempt && (
+                <ExemptNotice certificate={taxQuote.certificate} expires={taxQuote.certificate_expires} />
+              )}
+              {taxError && <p className="text-xs text-red-600">{taxError}</p>}
+              {!selectedCompany && (
+                <p className="text-xs text-gray-400">Pick a customer to figure sales tax.</p>
+              )}
+              <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                <span className="text-sm font-semibold text-gray-900">Total</span>
+                <span className="text-base font-semibold text-gray-900">
+                  {formatCurrency(subtotal + previewTax)}
+                </span>
+              </div>
             </div>
           </div>
         </div>

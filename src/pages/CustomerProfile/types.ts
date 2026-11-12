@@ -16,6 +16,9 @@ export interface Company {
   account_number: string;
   quickbooks_id: string;
   verbal_passcode: string | null;
+  tax_exempt?: boolean | null;
+  tax_exempt_cert?: string | null;
+  tax_exempt_expires?: string | null;
   phone: string;
   email: string;
   phones: PhoneEntry[];

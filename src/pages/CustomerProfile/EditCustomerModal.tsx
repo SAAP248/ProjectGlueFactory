@@ -36,6 +36,9 @@ export default function EditCustomerModal({ company, onClose, onSaved }: Props) 
   const [accountNumber, setAccountNumber] = useState(company.account_number || '');
   const [quickbooksId, setQuickbooksId] = useState(company.quickbooks_id || '');
   const [passcode, setPasscode] = useState(company.verbal_passcode || '');
+  const [taxExempt, setTaxExempt] = useState(!!company.tax_exempt);
+  const [taxCert, setTaxCert] = useState(company.tax_exempt_cert || '');
+  const [taxExpires, setTaxExpires] = useState(company.tax_exempt_expires || '');
   const [qbSyncStatus, setQbSyncStatus] = useState<QbSyncStatus>(
     (company.qb_sync_status as QbSyncStatus) || 'not_synced'
   );
@@ -141,6 +144,12 @@ export default function EditCustomerModal({ company, onClose, onSaved }: Props) 
     setSaving(true);
     setError('');
 
+    if (taxExempt && !taxCert.trim()) {
+      setError('Enter the tax-exempt certificate number, or turn tax exempt off.');
+      setSaving(false);
+      return;
+    }
+
     const filteredPhones = phones.filter(p => p.number.trim());
     const filteredEmails = companyEmails.filter(e => e.address.trim());
 
@@ -153,6 +162,9 @@ export default function EditCustomerModal({ company, onClose, onSaved }: Props) 
       account_number: accountNumber.trim(),
       quickbooks_id: quickbooksId.trim(),
       verbal_passcode: passcode.trim() || null,
+      tax_exempt: taxExempt,
+      tax_exempt_cert: taxExempt ? taxCert.trim() : null,
+      tax_exempt_expires: taxExempt && taxExpires ? taxExpires : null,
       qb_sync_status: quickbooksId.trim() ? qbSyncStatus : 'not_synced',
       qb_last_synced_at:
         quickbooksId.trim() && qbSyncStatus === 'synced'
@@ -600,6 +612,46 @@ export default function EditCustomerModal({ company, onClose, onSaved }: Props) 
                 />
               </div>
             </div>
+          </section>
+
+          <div className="border-t border-gray-100" />
+
+          <section>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Sales Tax</h3>
+            <label className="flex items-start gap-2 p-3 rounded-lg bg-gray-50 border border-gray-200 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={taxExempt}
+                onChange={e => setTaxExempt(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-800">Tax exempt</span>
+                <span className="block text-xs text-gray-500">No Florida sales tax is charged on this customer's invoices or estimates while the certificate is good.</span>
+              </span>
+            </label>
+            {taxExempt && (
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Certificate Number <span className="text-red-500">*</span></label>
+                  <input
+                    value={taxCert}
+                    onChange={e => setTaxCert(e.target.value)}
+                    placeholder="e.g. 85-8012345678C-1"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Expires</label>
+                  <input
+                    type="date"
+                    value={taxExpires}
+                    onChange={e => setTaxExpires(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            )}
           </section>
 
           <div className="border-t border-gray-100" />
