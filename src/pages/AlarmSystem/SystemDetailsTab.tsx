@@ -115,22 +115,7 @@ export default function SystemDetailsTab({ system, onUpdate }: Props) {
             >
               {form.is_synced_cs ? 'UNSYNC' : 'SYNC'}
             </button>
-            <button
-              onClick={() => toggleField('is_out_of_service')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold tracking-wide transition-colors ${
-                form.is_out_of_service ? 'bg-orange-600 text-white' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-              }`}
-            >
-              OUT OF SERVICE
-            </button>
-            <button
-              onClick={() => toggleField('is_on_test')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold tracking-wide transition-colors ${
-                form.is_on_test ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-              }`}
-            >
-              ON TEST
-            </button>
+
           </div>
         </div>
 
@@ -193,21 +178,7 @@ export default function SystemDetailsTab({ system, onUpdate }: Props) {
             >
               {form.is_synced_comm ? 'UNSYNC' : 'SYNC'}
             </button>
-            <button className="px-3 py-2 rounded-lg text-xs font-bold tracking-wide bg-blue-600 text-white hover:bg-blue-700 transition-colors">
-              SEND WELCOME
-            </button>
-            <button className="px-3 py-2 rounded-lg text-xs font-bold tracking-wide bg-blue-600 text-white hover:bg-blue-700 transition-colors">
-              SILENCE BEEPS
-            </button>
-            <button className="px-3 py-2 rounded-lg text-xs font-bold tracking-wide bg-blue-600 text-white hover:bg-blue-700 transition-colors">
-              COMMUNICATION TEST
-            </button>
-            <button className="px-3 py-2 rounded-lg text-xs font-bold tracking-wide bg-blue-600 text-white hover:bg-blue-700 transition-colors">
-              DEVICE RESET
-            </button>
-            <button className="px-3 py-2 rounded-lg text-xs font-bold tracking-wide bg-orange-600 text-white hover:bg-orange-700 transition-colors">
-              PARTNER PORTAL
-            </button>
+
           </div>
         </div>
       </div>

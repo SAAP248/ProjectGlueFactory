@@ -8,6 +8,7 @@ import type {
   CustomerSystem, SystemZone, AlarmEmergencyContact, AlarmCodeWord, AlarmEventHistory
 } from '../CustomerProfile/types';
 import SystemDetailsTab from './SystemDetailsTab';
+import ActionsTab from './ActionsTab';
 import ZonesTab from './ZonesTab';
 import EmergencyContactsTab from './EmergencyContactsTab';
 import CodeWordsTab from './CodeWordsTab';
@@ -29,6 +30,7 @@ interface Props {
 
 const TABS: { id: AlarmSystemTab; label: string; icon: React.ElementType }[] = [
   { id: 'system-details', label: 'System Details', icon: Settings },
+  { id: 'actions', label: 'Actions', icon: ShieldCheck },
   { id: 'zones', label: 'Zones', icon: Home },
   { id: 'emergency-contacts', label: 'Emergency Contacts', icon: Users },
   { id: 'code-words', label: 'Code Words', icon: Lock },
@@ -168,6 +170,9 @@ export default function AlarmSystemDetail({ system: initialSystem, companyName, 
           {activeTab === 'system-details' && (
             <SystemDetailsTab system={system} onUpdate={handleSystemUpdate} />
           )}
+          <div hidden={activeTab !== 'actions'}>
+            <ActionsTab key={system.id} system={system} companyName={companyName} />
+          </div>
           {activeTab === 'zones' && (
             <ZonesTab systemId={system.id} zones={zones} onZonesChange={setZones} />
           )}
